@@ -106,7 +106,7 @@ O Supabase é a fonte principal quando `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC
 
 Na tela **Novo produto**, administradores podem colar uma URL HTTPS de anúncio do Mercado Livre Brasil. O backend valida o domínio e o código MLB, consulta a API pública e prepara título, marca, categoria, descrições, preços, imagens e especificações para revisão. A importação nunca salva ou publica automaticamente; categoria, link de afiliado e demais campos devem ser conferidos antes do cadastro.
 
-O endpoint de itens do Mercado Livre pode responder `403` em consultas sem autenticação. O importador usa o fluxo OAuth 2.0 Authorization Code oficial, com `state`, PKCE, escopo `offline_access read` e renovação automática. Se a API não estiver disponível, tenta uma única leitura passiva de Open Graph e JSON-LD da página pública. Bloqueios e páginas de verificação de tráfego são respeitados e nunca contornados.
+O importador usa exclusivamente a API oficial do Mercado Livre com OAuth 2.0 Authorization Code, `state`, PKCE, escopo `offline_access read` e renovação automática. Depois de extrair o código MLB da URL completa, consulta `/items/{ITEM_ID}`, `/items/{ITEM_ID}/description` e `/categories/{CATEGORY_ID}`. Não acessa nem processa o HTML público do anúncio.
 
 ### OAuth do Mercado Livre
 
