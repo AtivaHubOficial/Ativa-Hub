@@ -1,7 +1,7 @@
 import "server-only";
 import type { ImportedProduct } from "@/types/product-import";
 import {MercadoLivreUrlParserError,parseMercadoLivreUrl} from "@/lib/mercado-livre-url-parser";
-import {resolveCatalogProduct,type CatalogProduct} from "@/lib/mercado-livre-catalog";
+import {mercadoLivreAuthorizationHeaders,resolveCatalogProduct,type CatalogProduct} from "@/lib/mercado-livre-catalog";
 
 const API_ORIGIN="https://api.mercadolibre.com";
 const TIMEOUT_MS=10_000;
@@ -32,14 +32,14 @@ function isTimeout(error:unknown){return error instanceof Error&&(error.name==="
 async function apiJson<T>(path:string,accessToken:string,optional404=false):Promise<T|undefined>{
   const url=`${API_ORIGIN}${path}`;
   let response:Response;
-  try{response=await fetch(url,{headers:{Accept:"application/json",Authorization:`Bearer ${accessToken}`,"User-Agent":"AtivaHub/2.0 (+product-importer)"},cache:"no-store",signal:AbortSignal.timeout(TIMEOUT_MS)})}
+  try{response=await fetch(url,{headers:mercadoLivreAuthorizationHeaders(accessToken),cache:"no-store",signal:AbortSignal.timeout(TIMEOUT_MS)})}
   catch(error){if(isTimeout(error))throw new MercadoLivreImportError("TIMEOUT","A API do Mercado Livre excedeu 10 segundos.",{endpoint:path},error);throw new MercadoLivreImportError("NETWORK_ERROR","Erro de rede ao consultar a API do Mercado Livre.",{endpoint:path},error)}
   const contentType=response.headers.get("content-type")??"";
   let body:unknown;
   if(contentType.includes("json")){try{body=await response.json()}catch(error){throw new MercadoLivreImportError("UNEXPECTED_RESPONSE","A API do Mercado Livre retornou JSON inválido.",{endpoint:path,status:response.status},error)}}
   if(response.status===404){if(optional404)return undefined;throw new MercadoLivreImportError("API_NOT_FOUND","O anúncio não foi encontrado na API oficial do Mercado Livre (404).",{endpoint:path,status:404})}
   const apiError=body&&typeof body==="object"?body as MlApiError:{};
-  const details={endpoint:path,status:response.status,apiCode:String(apiError.code??apiError.error??""),apiMessage:String(apiError.message??"")};
+  const details={endpoint:path,status:response.status,authorizationPresent:Boolean(accessToken),apiCode:String(apiError.code??apiError.error??""),apiMessage:String(apiError.message??"").slice(0,240)};
   if(response.status===401)throw new MercadoLivreImportError("API_UNAUTHORIZED","O access token do Mercado Livre expirou ou foi revogado. Conecte a conta novamente.",details);
   if(response.status===403)throw new MercadoLivreImportError("API_FORBIDDEN","A API oficial do Mercado Livre recusou a consulta (403). Verifique as permissões da aplicação e da conta autorizada.",details);
   if(!response.ok)throw new MercadoLivreImportError("UNEXPECTED_RESPONSE",`A API do Mercado Livre respondeu com status inesperado (${response.status}).`,details);
@@ -81,7 +81,7 @@ function catalogAsItem(product:CatalogProduct,item:MlItem|undefined,offer:{price
 function catalogError(error:unknown,productId:string):never{
   if(error instanceof MercadoLivreImportError){
     if(error.code==="API_NOT_FOUND")throw new MercadoLivreImportError("CATALOG_PRODUCT_NOT_FOUND",`O produto de catálogo ${productId} não foi encontrado.`,{productId},error);
-    if(error.code==="API_UNAUTHORIZED"||error.code==="API_FORBIDDEN")throw new MercadoLivreImportError("CATALOG_API_UNAUTHORIZED","A API do Mercado Livre não autorizou a consulta ao catálogo.",{productId},error);
+    if(error.code==="API_UNAUTHORIZED"||error.code==="API_FORBIDDEN")throw new MercadoLivreImportError("CATALOG_API_UNAUTHORIZED","A API do Mercado Livre não autorizou a consulta ao catálogo.",{productId,endpoint:error.details?.endpoint,status:error.details?.status,authorizationPresent:error.details?.authorizationPresent,apiCode:error.details?.apiCode},error);
   }
   throw error;
 }
@@ -91,7 +91,7 @@ export async function importMercadoLivreProduct(rawUrl:string,accessToken:string
   const identifier=parseIdentifier(rawUrl);
   if(identifier.catalogDetected){
     try{
-      const resolved=await resolveCatalogProduct<MlItem>(identifier.productId,identifier.itemId,(path,optional404)=>apiJson(path,accessToken,optional404));
+      const resolved=await resolveCatalogProduct<MlItem>(identifier.productId,identifier.itemId,accessToken,apiJson);
       if(identifier.itemId&&!resolved.item)throw new MercadoLivreImportError("OFFER_ITEM_NOT_FOUND",`A oferta ${identifier.itemId} indicada na URL não foi encontrada.`,{productId:identifier.productId,itemId:identifier.itemId});
       if(identifier.itemId&&String(resolved.item?.catalog_product_id??"").toUpperCase()!==identifier.productId)throw new MercadoLivreImportError("OFFER_ITEM_NOT_FOUND",`A oferta ${identifier.itemId} não pertence ao produto de catálogo ${identifier.productId}.`,{productId:identifier.productId,itemId:identifier.itemId});
       const combined=catalogAsItem(resolved.product,resolved.item,resolved.offer,rawUrl);
