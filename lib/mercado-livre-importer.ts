@@ -1,8 +1,8 @@
 import "server-only";
 import type { ImportedProduct } from "@/types/product-import";
+import {MercadoLivreUrlParserError,parseMercadoLivreUrl} from "@/lib/mercado-livre-url-parser";
 
 const API_ORIGIN="https://api.mercadolibre.com";
-const ALLOWED_HOSTS=new Set(["mercadolivre.com.br","www.mercadolivre.com.br","produto.mercadolivre.com.br"]);
 const TIMEOUT_MS=10_000;
 
 export type ImportErrorCode="INVALID_URL"|"ITEM_ID_NOT_FOUND"|"CATALOG_URL_UNSUPPORTED"|"API_NOT_FOUND"|"API_UNAUTHORIZED"|"API_FORBIDDEN"|"TIMEOUT"|"NETWORK_ERROR"|"UNEXPECTED_RESPONSE"|"NORMALIZATION_ERROR";
@@ -12,17 +12,15 @@ type MlItem={id?:unknown;title?:unknown;price?:unknown;original_price?:unknown;p
 type MlApiError={error?:unknown;message?:unknown;code?:unknown;status?:unknown};
 
 function extractItemId(rawUrl:string):string{
-  let url:URL;
-  try{url=new URL(rawUrl)}catch{throw new MercadoLivreImportError("INVALID_URL","URL inválida. Informe o endereço completo do anúncio.")}
-  const host=url.hostname.toLowerCase();
-  if(url.protocol!=="https:"||!ALLOWED_HOSTS.has(host))throw new MercadoLivreImportError("INVALID_URL","URL inválida. Use um link HTTPS do Mercado Livre Brasil.",{host,protocol:url.protocol});
-  const queryItem=url.searchParams.get("item_id")?.match(/^MLB[-_]?([0-9]{6,})$/i);
-  if(queryItem)return`MLB${queryItem[1]}`;
-  const catalogProduct=url.pathname.match(/\/p\/(MLB[0-9]{6,})(?:\/|$)/i);
-  if(catalogProduct)throw new MercadoLivreImportError("CATALOG_URL_UNSUPPORTED",`A URL contém o produto de catálogo ${catalogProduct[1].toUpperCase()}, não um anúncio. Abra uma oferta específica e copie a URL no formato /MLB-1234567890-...`,{productId:catalogProduct[1].toUpperCase()});
-  const listing=url.pathname.match(/(?:^|\/)MLB[-_]([0-9]{6,})(?:-|_|\/|$)/i);
-  if(!listing)throw new MercadoLivreImportError("ITEM_ID_NOT_FOUND","ITEM_ID não encontrado na URL. Use a URL completa de uma oferta no formato /MLB-1234567890-..., não um link encurtado ou página de catálogo.");
-  return`MLB${listing[1]}`;
+  try{
+    const identifier=parseMercadoLivreUrl(rawUrl);
+    if(identifier.catalogDetected)throw new MercadoLivreImportError("CATALOG_URL_UNSUPPORTED",`A URL contém o produto de catálogo ${identifier.productId}, não um anúncio. Abra uma oferta específica e copie a URL no formato /MLB-1234567890-...`,{productId:identifier.productId});
+    return identifier.itemId;
+  }catch(error){
+    if(error instanceof MercadoLivreImportError)throw error;
+    if(error instanceof MercadoLivreUrlParserError)throw new MercadoLivreImportError(error.code,error.message,error.details,error);
+    throw error;
+  }
 }
 export const getMercadoLivreItemId=extractItemId;
 
