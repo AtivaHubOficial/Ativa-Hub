@@ -108,6 +108,8 @@ Na tela **Novo produto**, administradores podem colar uma URL HTTPS de anúncio 
 
 O importador usa exclusivamente a API oficial do Mercado Livre com OAuth 2.0 Authorization Code, `state`, PKCE, escopo `offline_access read` e renovação automática. Depois de extrair o código MLB da URL completa, consulta `/items/{ITEM_ID}`, `/items/{ITEM_ID}/description` e `/categories/{CATEGORY_ID}`. Não acessa nem processa o HTML público do anúncio.
 
+URLs de oferta no formato `/MLB-1234567890-...` contêm um `ITEM_ID` e são aceitas. URLs de catálogo no formato `/p/MLB12345678` contêm um `product_id`, que pode representar várias ofertas concorrentes, e são rejeitadas com orientação para abrir uma oferta específica. Se uma URL de catálogo trouxer um parâmetro `item_id=MLB...` explícito, esse anúncio específico pode ser importado.
+
 ### OAuth do Mercado Livre
 
 Configure somente no ambiente do servidor:
