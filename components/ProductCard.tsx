@@ -1,8 +1,8 @@
 import Link from "next/link";
-import Image from "next/image";
 import { BadgeCheck, Star, Truck } from "lucide-react";
 import { money } from "@/lib/data";
 import { Product } from "@/types/product";
+import ProductImage from "@/components/product/ProductImage";
 
 export default function ProductCard({ product }: { product: Product }) {
   const discount = product.oldPrice
@@ -13,7 +13,7 @@ export default function ProductCard({ product }: { product: Product }) {
     <article className="flex overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
       <div className="flex w-full flex-col">
         <Link href={`/produto/${product.id}`} className="relative block h-60 bg-white">
-          <Image src={product.imageUrl} alt={product.title} fill className="object-contain p-5" />
+          <ProductImage src={product.imageUrl} alt={product.title} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" className="object-contain p-5" />
           {discount > 0 && (
             <span className="absolute left-3 top-3 rounded-full bg-green-600 px-3 py-1 text-xs font-black text-white">
               {discount}% OFF

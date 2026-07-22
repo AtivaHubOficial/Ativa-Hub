@@ -1,0 +1,3 @@
+import "server-only";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+export async function requireAdmin(){const client=await createSupabaseServerClient();if(!client)return{ok:false as const,status:503,error:"Supabase não configurado."};const{data:{user}}=await client.auth.getUser();if(!user)return{ok:false as const,status:401,error:"Sessão expirada. Entre novamente."};const{data:admin}=await client.from("admin_users").select("user_id").eq("user_id",user.id).maybeSingle();if(!admin)return{ok:false as const,status:403,error:"Usuário sem permissão administrativa."};return{ok:true as const,user}}

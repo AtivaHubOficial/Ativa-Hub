@@ -67,3 +67,78 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 - Controle de acesso.
 - Registro de cliques.
 - Dashboard com dados reais.
+
+## Sprint 3.0.4 — autenticação administrativa
+
+As rotas `/admin`, `/admin/produtos` e `/admin/produtos/novo` exigem uma sessão do Supabase Auth e um vínculo em `public.admin_users`. A rota `/admin/login` permanece pública. Usuários autenticados sem autorização são enviados para `/admin/acesso-negado`.
+
+### Configuração e primeiro administrador
+
+1. Configure `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` em `.env.local`. A chave `service_role` não é usada pela aplicação.
+2. Execute `supabase/schema.sql` caso o schema inicial ainda não exista.
+3. Execute `supabase/migrations/20260720_sprint_3_0_4_admin_auth.sql` no SQL Editor.
+4. Em **Authentication > Users**, crie manualmente o usuário com e-mail e senha.
+5. Copie o UUID do usuário e execute no SQL Editor:
+
+```sql
+insert into public.admin_users (user_id)
+values ('UUID_DO_USUARIO_AQUI')
+on conflict (user_id) do nothing;
+```
+
+Somente o responsável pelo projeto deve executar esse cadastro pelo painel seguro do Supabase. A aplicação não oferece registro público nem permite que um usuário conceda privilégio administrativo a si mesmo.
+
+### Segurança
+
+- `anon` conserva apenas a leitura de produtos ativos definida no schema inicial.
+- `anon` não recebe `INSERT`, `UPDATE` ou `DELETE` em produtos.
+- Usuários autenticados só administram produtos quando `public.is_admin()` retorna verdadeiro.
+- `public.admin_users` permite ao usuário autenticado consultar apenas o próprio vínculo.
+- Middleware e proteção de interface complementam o RLS; não o substituem.
+
+## Sprint 3.0.5 — CRUD de produtos
+
+Execute `supabase/migrations/20260720_sprint_3_0_5_products_crud.sql` depois das migrations anteriores. Ela amplia `products`, cria categorias persistidas, índices e o bucket `product-images`, sempre preservando a autorização por `admin_users`/`is_admin()`.
+
+O Supabase é a fonte principal quando `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` estão preenchidas. `seedProducts` é somente fallback local quando essas variáveis não existem. O painel permite cadastrar, editar, excluir, filtrar, definir destaque e enviar múltiplas imagens JPEG, PNG ou WebP de até 5 MB.
+
+## Sprint 3.1 — Importador Inteligente
+
+Na tela **Novo produto**, administradores podem colar uma URL HTTPS de anúncio do Mercado Livre Brasil. O backend valida o domínio e o código MLB, consulta a API pública e prepara título, marca, categoria, descrições, preços, imagens e especificações para revisão. A importação nunca salva ou publica automaticamente; categoria, link de afiliado e demais campos devem ser conferidos antes do cadastro.
+
+O endpoint de itens do Mercado Livre pode responder `403` em consultas sem autenticação. O importador usa o fluxo OAuth 2.0 Authorization Code oficial, com `state`, PKCE, escopo `offline_access read` e renovação automática. Se a API não estiver disponível, tenta uma única leitura passiva de Open Graph e JSON-LD da página pública. Bloqueios e páginas de verificação de tráfego são respeitados e nunca contornados.
+
+### OAuth do Mercado Livre
+
+Configure somente no ambiente do servidor:
+
+```env
+MERCADO_LIVRE_CLIENT_ID=...
+MERCADO_LIVRE_CLIENT_SECRET=...
+MERCADO_LIVRE_REDIRECT_URI=https://ativa-hub.vercel.app/api/auth/mercado-livre/callback
+NEXT_PUBLIC_SITE_URL=https://ativa-hub.vercel.app
+```
+
+O administrador inicia a autorização pela tela **Novo produto**, usando **Conectar Mercado Livre**, ou diretamente por `/api/auth/mercado-livre/start`. O callback oficial é `/api/auth/mercado-livre/callback`.
+
+Access token e refresh token ficam em um envelope AES-256-GCM, armazenado em cookie `HttpOnly`, `Secure` em produção e `SameSite=Lax`. O navegador nunca recebe os tokens em texto legível. O access token é renovado até cinco minutos antes de expirar e o novo refresh token substitui o anterior. Nenhum token, Client Secret ou corpo da resposta OAuth é registrado em logs.
+
+#### Vercel
+
+1. Em **Project Settings > Environment Variables**, adicione as quatro variáveis acima para Production e Preview conforme necessário.
+2. Confirme no painel do Mercado Livre a URI exata `https://ativa-hub.vercel.app/api/auth/mercado-livre/callback`.
+3. Faça um novo deploy para disponibilizar as variáveis ao runtime.
+4. Entre no Admin Center, abra **Novo produto**, tente importar um anúncio e clique em **Conectar Mercado Livre**.
+
+Não configure Client Secret em variáveis iniciadas por `NEXT_PUBLIC_`.
+
+#### Desenvolvimento local
+
+As credenciais podem ficar em `.env.local`, que não deve ser versionado. Com a URI de produção atualmente cadastrada, a conclusão do OAuth deve ser homologada em `https://ativa-hub.vercel.app`, pois cookies de `localhost` não são enviados ao domínio da Vercel. Para concluir o fluxo inteiramente em localhost, cadastre também no aplicativo do Mercado Livre uma URI local permitida e defina temporariamente:
+
+```env
+MERCADO_LIVRE_REDIRECT_URI=http://localhost:3000/api/auth/mercado-livre/callback
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+```
+
+Não foi criada migration e nenhuma alteração foi aplicada ao banco remoto.

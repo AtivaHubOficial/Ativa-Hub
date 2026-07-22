@@ -1,70 +1,51 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import Image from "next/image";
+import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft, BadgeCheck, Star, Truck } from "lucide-react";
-import { loadProducts } from "@/lib/storage";
+import { notFound } from "next/navigation";
+import { headers } from "next/headers";
+import { BadgeCheck, ExternalLink, Truck } from "lucide-react";
+import ProductCard from "@/components/ProductCard";
+import ProductActions from "@/components/product/ProductActions";
+import ProductBreadcrumb from "@/components/product/ProductBreadcrumb";
+import ProductDescription from "@/components/product/ProductDescription";
+import ProductGallery from "@/components/product/ProductGallery";
+import ProductRatingSummary from "@/components/product/ProductRatingSummary";
 import { money } from "@/lib/data";
-import { Product } from "@/types/product";
+import { getProductPageData } from "@/lib/product-server";
 
-export default function ProductPage() {
-  const params = useParams<{ id: string }>();
-  const [product, setProduct] = useState<Product | null>(null);
+type PageProps = { params: Promise<{ id: string }> };
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+const validImage = (url: string) => /^https?:\/\//i.test(url);
+const summary = (value: string) => value.replace(/\s+/g, " ").trim().slice(0, 160);
+async function getBaseUrl() {
+  if (siteUrl) return siteUrl;
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host");
+  if (!host || !/^[a-z0-9.:[\]-]+$/i.test(host)) return undefined;
+  const protocol = requestHeaders.get("x-forwarded-proto") || (host.includes("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
+  return `${protocol}://${host}`;
+}
 
-  useEffect(() => {
-    setProduct(loadProducts().find((p) => p.id === params.id) ?? null);
-  }, [params.id]);
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { id } = await params; const { product } = await getProductPageData(id);
+  if (!product) return { title: "Produto não encontrado | Ativa Hub", robots: { index: false, follow: false } };
+  const description = summary(product.shortDescription || product.description || `${product.title} na Ativa Hub.`);
+  const path = `/produto/${product.slug || product.id}`; const baseUrl = await getBaseUrl(); const canonical = baseUrl ? `${baseUrl}${path}` : undefined;
+  const image = [product.imageUrl, ...product.gallery].find(validImage);
+  return { title: `${product.title} | Ativa Hub`, description, alternates: canonical ? { canonical } : undefined, openGraph: { type: "website", title: product.title, description, url: canonical, images: image ? [{ url: image, alt: product.title }] : undefined }, twitter: { card: image ? "summary_large_image" : "summary", title: product.title, description, images: image ? [image] : undefined } };
+}
 
-  if (!product) return <div className="p-10 text-center">Produto não encontrado.</div>;
-
-  return (
-    <main className="mx-auto max-w-6xl px-5 py-8">
-      <Link href="/" className="mb-6 inline-flex items-center gap-2 font-bold text-slate-600">
-        <ArrowLeft size={18} /> Voltar para a loja
-      </Link>
-
-      <div className="grid gap-8 rounded-3xl bg-white p-6 shadow-card md:grid-cols-2 md:p-9">
-        <div className="relative min-h-[430px]">
-          <Image src={product.imageUrl} alt={product.title} fill className="object-contain" />
-        </div>
-
-        <div>
-          <div className="text-sm font-bold text-slate-500">{product.brand} · {product.category}</div>
-          <h1 className="mt-2 text-3xl font-black">{product.title}</h1>
-
-          <div className="mt-4 flex items-center gap-2">
-            <span className="flex items-center gap-1 font-bold text-amber-500"><Star fill="currentColor" size={18}/>{product.rating}</span>
-            <span className="text-slate-500">{product.reviewCount.toLocaleString("pt-BR")} avaliações</span>
-          </div>
-
-          <div className="mt-6">
-            {product.oldPrice && <div className="text-slate-400 line-through">{money(product.oldPrice)}</div>}
-            <div className="text-5xl font-black">{money(product.price)}</div>
-            <div className="mt-1 text-green-700">{product.installmentText}</div>
-          </div>
-
-          <div className="mt-5 flex flex-wrap gap-2 text-sm font-bold">
-            {product.freeShipping && <span className="flex items-center gap-2 rounded-full bg-green-50 px-3 py-2 text-green-700"><Truck size={17}/>Frete grátis</span>}
-            {product.fullShipping && <span className="flex items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-blue-700"><BadgeCheck size={17}/>Envio Full</span>}
-          </div>
-
-          <p className="mt-6 leading-7 text-slate-600">{product.description}</p>
-
-          <ul className="mt-5 space-y-2">
-            {product.features.map((feature) => <li key={feature}>✓ {feature}</li>)}
-          </ul>
-
-          <a href={product.affiliateUrl} target="_blank" rel="nofollow sponsored noopener"
-             className="mt-8 block rounded-xl bg-green-600 px-5 py-4 text-center text-lg font-black text-white hover:bg-green-700">
-            Comprar no Mercado Livre
-          </a>
-          <p className="mt-3 text-center text-xs text-slate-500">
-            Você será direcionado ao site parceiro para concluir a compra.
-          </p>
-        </div>
-      </div>
-    </main>
-  );
+export default async function ProductPage({ params }: PageProps) {
+  const { id } = await params; const { product, related } = await getProductPageData(id);
+  if (!product || product.status !== "active") notFound();
+  const productPath = `/produto/${product.slug || product.id}`; const baseUrl = await getBaseUrl(); const pageUrl = baseUrl ? `${baseUrl}${productPath}` : productPath;
+  const imageList = Array.from(new Set([product.imageUrl, ...product.gallery].filter(validImage)));
+  const productJsonLd: Record<string, unknown> = { "@context": "https://schema.org", "@type": "Product", name: product.title, description: summary(product.shortDescription || product.description), category: product.category, image: imageList.length ? imageList : undefined, url: pageUrl, offers: { "@type": "Offer", price: product.price.toFixed(2), priceCurrency: "BRL", url: product.affiliateUrl || pageUrl } };
+  if (product.brand) productJsonLd.brand = { "@type": "Brand", name: product.brand };
+  if (product.reviewCount > 0 && product.rating > 0) productJsonLd.aggregateRating = { "@type": "AggregateRating", ratingValue: product.rating, reviewCount: product.reviewCount };
+  const breadcrumbJsonLd = { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [{ "@type": "ListItem", position: 1, name: "Home", item: baseUrl ? `${baseUrl}/` : "/" }, ...(product.category ? [{ "@type": "ListItem", position: 2, name: product.category }] : []), { "@type": "ListItem", position: product.category ? 3 : 2, name: product.title, item: pageUrl }] };
+  const safeJson = (value: unknown) => JSON.stringify(value).replace(/</g, "\\u003c");
+  return <main className="mx-auto max-w-7xl px-4 py-6 sm:px-5 sm:py-8"><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJson(productJsonLd) }}/><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJson(breadcrumbJsonLd) }}/><ProductBreadcrumb category={product.category} title={product.title}/>
+    <article className="grid gap-8 rounded-3xl bg-white p-5 shadow-card md:grid-cols-2 md:p-8 lg:gap-12"><ProductGallery title={product.title} imageUrl={product.imageUrl} gallery={product.gallery}/><div className="min-w-0"><p className="text-sm font-bold text-slate-500">{[product.brand, product.category].filter(Boolean).join(" · ")}</p><h1 className="mt-2 break-words text-3xl font-black leading-tight text-slate-950 sm:text-4xl">{product.title}</h1><ProductRatingSummary rating={product.rating} reviewCount={product.reviewCount}/><div className="mt-6">{product.oldPrice && <div className="text-slate-400 line-through">{money(product.oldPrice)}</div>}<div className="text-4xl font-black text-slate-950 sm:text-5xl">{money(product.price)}</div>{product.installmentText && <div className="mt-1 text-green-700">{product.installmentText}</div>}</div><div className="mt-5 flex flex-wrap gap-2 text-sm font-bold">{product.freeShipping && <span className="flex items-center gap-2 rounded-full bg-green-50 px-3 py-2 text-green-700"><Truck size={17} aria-hidden="true"/>Frete grátis</span>}{product.fullShipping && <span className="flex items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-blue-700"><BadgeCheck size={17} aria-hidden="true"/>Envio Full</span>}</div>{product.shortDescription && <p className="mt-6 leading-7 text-slate-600">{product.shortDescription}</p>}{product.affiliateUrl && <Link href={product.affiliateUrl} target="_blank" rel="nofollow sponsored noopener" className="mt-8 flex min-h-14 items-center justify-center gap-2 rounded-xl bg-green-600 px-5 py-4 text-center text-lg font-black text-white hover:bg-green-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-green-300">Comprar no Mercado Livre <ExternalLink size={19} aria-hidden="true"/></Link>}<p className="mt-3 text-center text-xs text-slate-500">Você será direcionado ao site parceiro. Preço e disponibilidade são confirmados no destino.</p><ProductActions id={product.id} title={product.title}/></div></article>
+    <ProductDescription product={product}/><section className="mt-10" aria-labelledby="related-title"><div className="mb-5"><p className="text-sm font-bold uppercase tracking-wider text-green-700">Continue explorando</p><h2 id="related-title" className="mt-1 text-2xl font-black text-slate-950 sm:text-3xl">Produtos relacionados</h2></div>{related.length ? <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">{related.map((item) => <ProductCard key={item.id} product={item}/>)}</div> : <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">Nenhum outro produto ativo disponível no momento.</p>}</section>
+  </main>;
 }

@@ -1,0 +1,4 @@
+import type { Metadata } from "next";
+import LoginForm from "./LoginForm";
+export const metadata:Metadata={title:"Entrar | Admin Center",description:"Acesso protegido ao painel da Ativa Hub."};
+export default function AdminLoginPage(){return <main className="grid min-h-screen place-items-center px-5 py-10"><section className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-7 shadow-card sm:p-9"><div className="inline-flex items-center text-xl font-black"><span className="rounded-lg bg-ativa-yellow px-2 py-1">ATIVA</span><span className="ml-2">HUB</span></div><p className="mt-8 text-xs font-black uppercase tracking-widest text-amber-600">Área restrita</p><h1 className="mt-2 text-3xl font-black text-slate-950">Acesse o Admin</h1><p className="mt-2 text-sm leading-6 text-slate-500">Entre com uma conta autorizada no Supabase.</p><LoginForm/></section></main>}

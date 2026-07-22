@@ -5,3 +5,18 @@
 html { scroll-behavior: smooth; }
 body { background: #f5f7fb; color: #172033; }
 * { box-sizing: border-box; }
+
+/* Componentes de produto com conteúdo externo longo nunca ampliam a viewport. */
+main > article,
+[aria-label^="Galeria de imagens de"],
+[aria-labelledby="product-description-title"] {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+main > article p,
+[aria-labelledby="product-description-title"] p,
+[aria-labelledby="product-description-title"] dd {
+  overflow-wrap: anywhere;
+}

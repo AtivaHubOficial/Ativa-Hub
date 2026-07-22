@@ -2,6 +2,7 @@ export type ProductStatus = "active" | "draft" | "paused";
 
 export type Product = {
   id: string;
+  slug?: string;
   title: string;
   brand: string;
   category: string;
@@ -21,5 +22,8 @@ export type Product = {
   tags: string[];
   affiliateUrl: string;
   status: ProductStatus;
+  featured?: boolean;
+  shortDescription?: string;
+  specifications?: Array<{ name: string; value: string }>;
   createdAt: string;
 };

@@ -3,17 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import Header from "@/components/Header";
 import ProductCard from "@/components/ProductCard";
-import { categories } from "@/lib/data";
-import { loadProducts } from "@/lib/storage";
+import { listCategories, listProducts } from "@/lib/product-repository";
 import { Product } from "@/types/product";
 import { ArrowRight, ShieldCheck, Sparkles, Tractor } from "lucide-react";
 
 export default function HomePage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<string[]>(["Todos"]);
   const [category, setCategory] = useState("Todos");
   const [search, setSearch] = useState("");
 
-  useEffect(() => setProducts(loadProducts().filter((p) => p.status === "active")), []);
+  useEffect(() => { listProducts().then(setProducts); listCategories().then((items)=>setCategories(["Todos",...items])); }, []);
 
   const filtered = useMemo(() => {
     const query = search.toLowerCase();

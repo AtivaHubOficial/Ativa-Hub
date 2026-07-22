@@ -1,0 +1,5 @@
+import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/admin-authorization";
+import { createAuthorizationRequest, ML_STATE_COOKIE, MercadoLivreOAuthError, secureCookieOptions } from "@/lib/mercado-livre-oauth";
+export const runtime="nodejs";
+export async function GET(){const admin=await requireAdmin();if(!admin.ok)return NextResponse.redirect(new URL(admin.status===401?"/admin/login":"/admin/acesso-negado",process.env.NEXT_PUBLIC_SITE_URL||"https://ativa-hub.vercel.app"));try{const authorization=createAuthorizationRequest();const response=NextResponse.redirect(authorization.url);response.cookies.set(ML_STATE_COOKIE,authorization.stateCookie,secureCookieOptions(10*60));return response}catch(error){console.error("[ml-oauth] start failed",{code:error instanceof MercadoLivreOAuthError?error.code:"INTERNAL_ERROR",message:error instanceof Error?error.message:String(error)});return NextResponse.json({error:"Não foi possível iniciar a autorização do Mercado Livre."},{status:error instanceof MercadoLivreOAuthError?error.status:500})}}
