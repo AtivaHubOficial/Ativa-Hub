@@ -78,14 +78,33 @@ function catalogAsItem(product:CatalogProduct,item:MlItem|undefined,offer:{price
   };
 }
 
+function itemWithCatalogAttributes(item:MlItem,product:CatalogProduct|undefined):MlItem{
+  if(!product)return item;
+  const itemAttributes=Array.isArray(item.attributes)?item.attributes as Array<Record<string,unknown>>:[];
+  const catalogAttributes=Array.isArray(product.attributes)?product.attributes as Array<Record<string,unknown>>:[];
+  const itemAttributeIds=new Set(itemAttributes.map(attribute=>String(attribute.id??"")).filter(Boolean));
+  return{...item,attributes:[...itemAttributes,...catalogAttributes.filter(attribute=>!itemAttributeIds.has(String(attribute.id??"")))]};
+}
+
 export async function importMercadoLivreProduct(rawUrl:string,accessToken:string):Promise<ImportedProduct>{
   if(!accessToken)throw new MercadoLivreImportError("API_UNAUTHORIZED","Access token do Mercado Livre não disponível.");
   const identifier=parseIdentifier(rawUrl);
   if(identifier.catalogDetected){
+    if(identifier.itemId){
+      const item=await apiJson<MlItem>(`/items/${encodeURIComponent(identifier.itemId)}`,accessToken);
+      const itemCatalogProductId=String(item?.catalog_product_id??"").toUpperCase();
+      if(itemCatalogProductId&&itemCatalogProductId!==identifier.productId)throw new MercadoLivreImportError("OFFER_ITEM_NOT_FOUND",`A oferta ${identifier.itemId} não pertence ao produto de catálogo ${identifier.productId}.`,{productId:identifier.productId,itemId:identifier.itemId});
+      let product:CatalogProduct|undefined;
+      try{product=await apiJson<CatalogProduct>(`/products/${encodeURIComponent(itemCatalogProductId||identifier.productId)}`,accessToken)}catch(error){if(!(error instanceof MercadoLivreImportError&&error.code==="API_FORBIDDEN"))throw error}
+      const enrichedItem=itemWithCatalogAttributes(item!,product);
+      const [description,category]=await Promise.all([
+        apiJson<{plain_text?:unknown}>(`/items/${encodeURIComponent(identifier.itemId)}/description`,accessToken,true),
+        enrichedItem.category_id?apiJson<{name?:unknown}>(`/categories/${encodeURIComponent(String(enrichedItem.category_id))}`,accessToken,true):undefined,
+      ]);
+      return normalize(enrichedItem,description,category);
+    }
     try{
-      const resolved=await resolveCatalogProduct<MlItem>(identifier.productId,identifier.itemId,accessToken,apiJson);
-      if(identifier.itemId&&!resolved.item)throw new MercadoLivreImportError("OFFER_ITEM_NOT_FOUND",`A oferta ${identifier.itemId} indicada na URL não foi encontrada.`,{productId:identifier.productId,itemId:identifier.itemId});
-      if(identifier.itemId&&String(resolved.item?.catalog_product_id??"").toUpperCase()!==identifier.productId)throw new MercadoLivreImportError("OFFER_ITEM_NOT_FOUND",`A oferta ${identifier.itemId} não pertence ao produto de catálogo ${identifier.productId}.`,{productId:identifier.productId,itemId:identifier.itemId});
+      const resolved=await resolveCatalogProduct<MlItem>(identifier.productId,accessToken,apiJson);
       const combined=catalogAsItem(resolved.product,resolved.item,resolved.offer,rawUrl);
       const price=positiveNumber(combined.price),pictures=Array.isArray(combined.pictures)?combined.pictures:[];
       if(!price||!String(combined.title??"").trim()||!pictures.length)throw new MercadoLivreImportError("CATALOG_DATA_INCOMPLETE",`O catálogo ${identifier.productId} não forneceu dados suficientes para preencher o formulário${resolved.itemId?" mesmo após consultar a oferta associada":" e nenhuma oferta válida foi encontrada"}.`,{productId:identifier.productId,itemId:resolved.itemId,missing:[!combined.title?"title":null,!price?"price":null,!pictures.length?"pictures":null].filter(Boolean)});
