@@ -1,5 +1,5 @@
 export type MercadoLivreUrlIdentifier=
-  |{catalogDetected:true;productId:string;itemId:null}
+  |{catalogDetected:true;productId:string;itemId:string|null}
   |{catalogDetected:false;productId:null;itemId:string};
 
 const ALLOWED_HOSTS=new Set(["mercadolivre.com.br","www.mercadolivre.com.br","produto.mercadolivre.com.br"]);
@@ -22,12 +22,14 @@ export function parseMercadoLivreUrl(rawUrl:string):MercadoLivreUrlIdentifier{
   try{url=new URL(rawUrl)}catch{throw new MercadoLivreUrlParserError("INVALID_URL","URL inválida. Informe o endereço completo do anúncio.")}
   const host=url.hostname.toLowerCase();
   if(url.protocol!=="https:"||!ALLOWED_HOSTS.has(host))throw new MercadoLivreUrlParserError("INVALID_URL","URL inválida. Use um link HTTPS do Mercado Livre Brasil.",{host,protocol:url.protocol});
-  const queryItem=url.searchParams.get("item_id")?.match(/^MLB[-_]?([0-9]{6,})$/i);
-  if(queryItem)return{catalogDetected:false,productId:null,itemId:`MLB${queryItem[1]}`};
   const segments=pathnameSegments(url.pathname);
   const lastSegment=segments.at(-1);
   const catalogProduct=lastSegment&&CATALOG_PRODUCT_ID.test(lastSegment)&&segments.length>1?lastSegment.toUpperCase():null;
-  if(catalogProduct)return{catalogDetected:true,productId:catalogProduct,itemId:null};
+  const directItem=url.searchParams.get("item_id")??url.searchParams.get("wid");
+  const filteredItem=url.searchParams.get("pdp_filters")?.match(/(?:^|[|,])item_id:(MLB[0-9]{6,})(?:$|[|,])/i)?.[1];
+  const queryItem=(directItem?.match(/^MLB[-_]?([0-9]{6,})$/i)?.[1]??filteredItem?.slice(3))??null;
+  if(catalogProduct)return{catalogDetected:true,productId:catalogProduct,itemId:queryItem?`MLB${queryItem}`:null};
+  if(queryItem)return{catalogDetected:false,productId:null,itemId:`MLB${queryItem}`};
   const normalizedPathname=`/${segments.join("/")}`;
   const listing=normalizedPathname.match(/(?:^|\/)MLB[-_]([0-9]{6,})(?:-|_|\/|$)/i);
   if(listing)return{catalogDetected:false,productId:null,itemId:`MLB${listing[1]}`};
