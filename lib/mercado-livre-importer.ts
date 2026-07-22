@@ -6,7 +6,7 @@ import {mercadoLivreAuthorizationHeaders,resolveCatalogProduct,type CatalogProdu
 const API_ORIGIN="https://api.mercadolibre.com";
 const TIMEOUT_MS=10_000;
 
-export type ImportErrorCode="INVALID_URL"|"ITEM_ID_NOT_FOUND"|"CATALOG_PRODUCT_NOT_FOUND"|"CATALOG_API_UNAUTHORIZED"|"CATALOG_DATA_INCOMPLETE"|"OFFER_ITEM_NOT_FOUND"|"API_NOT_FOUND"|"API_UNAUTHORIZED"|"API_FORBIDDEN"|"TIMEOUT"|"NETWORK_ERROR"|"UNEXPECTED_RESPONSE"|"NORMALIZATION_ERROR";
+export type ImportErrorCode="INVALID_URL"|"ITEM_ID_NOT_FOUND"|"CATALOG_DATA_INCOMPLETE"|"OFFER_ITEM_NOT_FOUND"|"API_NOT_FOUND"|"API_UNAUTHORIZED"|"API_FORBIDDEN"|"TIMEOUT"|"NETWORK_ERROR"|"UNEXPECTED_RESPONSE"|"NORMALIZATION_ERROR";
 export class MercadoLivreImportError extends Error{constructor(public readonly code:ImportErrorCode,message:string,public readonly details?:Record<string,unknown>,public readonly cause?:unknown){super(message);this.name="MercadoLivreImportError"}}
 
 type MlItem={id?:unknown;title?:unknown;price?:unknown;original_price?:unknown;permalink?:unknown;thumbnail?:unknown;pictures?:unknown;attributes?:unknown;category_id?:unknown;catalog_product_id?:unknown};
@@ -37,9 +37,9 @@ async function apiJson<T>(path:string,accessToken:string,optional404=false):Prom
   const contentType=response.headers.get("content-type")??"";
   let body:unknown;
   if(contentType.includes("json")){try{body=await response.json()}catch(error){throw new MercadoLivreImportError("UNEXPECTED_RESPONSE","A API do Mercado Livre retornou JSON inválido.",{endpoint:path,status:response.status},error)}}
-  if(response.status===404){if(optional404)return undefined;throw new MercadoLivreImportError("API_NOT_FOUND","O anúncio não foi encontrado na API oficial do Mercado Livre (404).",{endpoint:path,status:404})}
   const apiError=body&&typeof body==="object"?body as MlApiError:{};
-  const details={endpoint:path,status:response.status,authorizationPresent:Boolean(accessToken),apiCode:String(apiError.code??apiError.error??""),apiMessage:String(apiError.message??"").slice(0,240)};
+  const details={endpoint:path,status:response.status,apiCode:String(apiError.code??apiError.error??""),apiMessage:String(apiError.message??"").slice(0,240),apiResponse:true};
+  if(response.status===404){if(optional404)return undefined;throw new MercadoLivreImportError("API_NOT_FOUND","A API do Mercado Livre não encontrou o recurso.",details)}
   if(response.status===401)throw new MercadoLivreImportError("API_UNAUTHORIZED","O access token do Mercado Livre expirou ou foi revogado. Conecte a conta novamente.",details);
   if(response.status===403)throw new MercadoLivreImportError("API_FORBIDDEN","A API oficial do Mercado Livre recusou a consulta (403). Verifique as permissões da aplicação e da conta autorizada.",details);
   if(!response.ok)throw new MercadoLivreImportError("UNEXPECTED_RESPONSE",`A API do Mercado Livre respondeu com status inesperado (${response.status}).`,details);
@@ -78,14 +78,6 @@ function catalogAsItem(product:CatalogProduct,item:MlItem|undefined,offer:{price
   };
 }
 
-function catalogError(error:unknown,productId:string):never{
-  if(error instanceof MercadoLivreImportError){
-    if(error.code==="API_NOT_FOUND")throw new MercadoLivreImportError("CATALOG_PRODUCT_NOT_FOUND",`O produto de catálogo ${productId} não foi encontrado.`,{productId},error);
-    if(error.code==="API_UNAUTHORIZED"||error.code==="API_FORBIDDEN")throw new MercadoLivreImportError("CATALOG_API_UNAUTHORIZED","A API do Mercado Livre não autorizou a consulta ao catálogo.",{productId,endpoint:error.details?.endpoint,status:error.details?.status,authorizationPresent:error.details?.authorizationPresent,apiCode:error.details?.apiCode},error);
-  }
-  throw error;
-}
-
 export async function importMercadoLivreProduct(rawUrl:string,accessToken:string):Promise<ImportedProduct>{
   if(!accessToken)throw new MercadoLivreImportError("API_UNAUTHORIZED","Access token do Mercado Livre não disponível.");
   const identifier=parseIdentifier(rawUrl);
@@ -102,7 +94,7 @@ export async function importMercadoLivreProduct(rawUrl:string,accessToken:string
         combined.category_id?apiJson<{name?:unknown}>(`/categories/${encodeURIComponent(String(combined.category_id))}`,accessToken,true):undefined,
       ]);
       return normalize(combined,description,category);
-    }catch(error){return catalogError(error,identifier.productId)}
+    }catch(error){throw error}
   }
   const itemId=identifier.itemId;
   const item=await apiJson<MlItem>(`/items/${encodeURIComponent(itemId)}`,accessToken);
