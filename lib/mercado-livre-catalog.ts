@@ -10,15 +10,16 @@ export function mercadoLivreAuthorizationHeaders(accessToken:string){
 
 export async function resolveCatalogProduct<TItem>(
   productId:string,
+  preferredItemId:string|null,
   accessToken:string,
   request:<T>(path:string,accessToken:string,optional404?:boolean)=>Promise<T|undefined>,
-  requestItem:<T>(itemId:string)=>Promise<T>,
+  requestItem:<T>(itemId:string)=>Promise<T|undefined>,
 ):Promise<CatalogResolution<TItem>>{
   const product=await request<CatalogProduct>(`/products/${encodeURIComponent(productId)}`,accessToken);
   const offers=await request<CatalogOffers>(`/products/${encodeURIComponent(productId)}/items`,accessToken,true);
   const results=Array.isArray(offers?.results)?offers.results as CatalogOfferSummary[]:[];
-  const offer=results.find(result=>typeof result.item_id==="string"&&/^MLB[0-9]+$/.test(result.item_id));
-  const itemId=offer?.item_id as string|undefined??null;
+  const offer=results.find(result=>result.item_id===preferredItemId)??results.find(result=>typeof result.item_id==="string"&&/^MLB[0-9]+$/.test(result.item_id));
+  const itemId=preferredItemId??(offer?.item_id as string|undefined)??null;
   const item=itemId?await requestItem<TItem>(itemId):undefined;
   return{product:product!,offer,item,itemId};
 }

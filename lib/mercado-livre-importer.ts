@@ -11,6 +11,7 @@ export class MercadoLivreImportError extends Error{constructor(public readonly c
 
 type MlItem={id?:unknown;title?:unknown;price?:unknown;original_price?:unknown;permalink?:unknown;thumbnail?:unknown;pictures?:unknown;attributes?:unknown;category_id?:unknown;catalog_product_id?:unknown};
 type MlApiError={error?:unknown;message?:unknown;code?:unknown;status?:unknown};
+type MlUserProduct=CatalogProduct&{catalog_product_id?:unknown;category_id?:unknown};
 
 function parseIdentifier(rawUrl:string){
   try{
@@ -25,6 +26,7 @@ function parseIdentifier(rawUrl:string){
 export function getMercadoLivreItemId(rawUrl:string):string{
   const identifier=parseIdentifier(rawUrl);
   if(identifier.catalogDetected)throw new MercadoLivreImportError("ITEM_ID_NOT_FOUND","A URL contém um produto de catálogo, não um ITEM_ID de anúncio.",{productId:identifier.productId});
+  if(!identifier.itemId)throw new MercadoLivreImportError("USER_PRODUCT_UNSUPPORTED","A URL contém um User Product sem ITEM_ID explícito.",{userProductId:identifier.userProductId});
   return identifier.itemId;
 }
 
@@ -48,42 +50,25 @@ async function apiJson<T>(path:string,accessToken:string,optional404=false):Prom
   return body as T;
 }
 
-async function apiItem<T>(itemId:string,accessToken:string):Promise<T>{
-  return(await apiJson<T>(`/items/${encodeURIComponent(itemId)}`,accessToken))!;
-}
-
-async function diagnoseOAuthUser(accessToken:string){
-  let status=0,userId="",nickname="",error="",message="";
-  try{
-    const response=await fetch(`${API_ORIGIN}/users/me`,{method:"GET",headers:mercadoLivreAuthorizationHeaders(accessToken),cache:"no-store",signal:AbortSignal.timeout(TIMEOUT_MS)});
-    status=response.status;
-    if((response.headers.get("content-type")??"").includes("json")){
-      try{
-        const body=await response.json() as MlApiError&{id?:unknown;nickname?:unknown};
-        userId=String(body.id??"");
-        nickname=String(body.nickname??"");
-        error=String(body.error??body.code??"");
-        message=String(body.message??"").slice(0,240);
-      }catch{message="Resposta JSON inválida."}
-    }
-  }catch(cause){error="diagnostic_request_failed";message=cause instanceof Error?cause.name:"unknown"}
-  console.error("[product-import] OAuth user diagnostic",{status,userId,nickname,error,message});
+async function apiItem<T>(itemId:string,accessToken:string,allowForbiddenFallback=false):Promise<T|undefined>{
+  try{return await apiJson<T>(`/items/${encodeURIComponent(itemId)}`,accessToken)}
+  catch(error){if(allowForbiddenFallback&&error instanceof MercadoLivreImportError&&error.code==="API_FORBIDDEN")return undefined;throw error}
 }
 
 function strings(value:unknown):string[]{if(typeof value==="string")return[value];if(Array.isArray(value))return value.flatMap(strings);if(value&&typeof value==="object"&&"url" in value)return strings((value as{url:unknown}).url);return[]}
 function positiveNumber(value:unknown):number|undefined{const number=typeof value==="number"?value:Number(value);return Number.isFinite(number)&&number>0?number:undefined}
-function normalize(item:MlItem,description?:{plain_text?:unknown},category?:{name?:unknown}):ImportedProduct{
+function normalize(item:MlItem,description?:{plain_text?:unknown},category?:{name?:unknown},partial=false):ImportedProduct{
   try{
     const attributes=Array.isArray(item.attributes)?item.attributes as Array<Record<string,unknown>>:[];
-    const specifications=attributes.map(attribute=>({name:String(attribute.name??"").trim(),value:String(attribute.value_name??"").trim()})).filter(attribute=>attribute.name&&attribute.value);
+    const specifications=attributes.map(attribute=>{const values=Array.isArray(attribute.values)?attribute.values as Array<Record<string,unknown>>:[];return{name:String(attribute.name??"").trim(),value:String(attribute.value_name??values[0]?.name??"").trim()}}).filter(attribute=>attribute.name&&attribute.value);
     const pictures=Array.isArray(item.pictures)?item.pictures as Array<Record<string,unknown>>:[];
     const images=pictures.flatMap(picture=>strings(picture.secure_url??picture.url)).filter(url=>url.startsWith("https://"));
     const thumbnail=String(item.thumbnail??"").replace(/^http:/,"https:");
     if(!images.length&&thumbnail.startsWith("https://"))images.push(thumbnail);
     const id=String(item.id??"").trim(),title=String(item.title??"").trim(),price=positiveNumber(item.price);
-    if(!id||!title||!price||!images.length)throw new Error("Campos obrigatórios ausentes: id, title, price ou pictures.");
+    if(!partial&&(!id||!title||!price||!images.length))throw new Error("Campos obrigatórios ausentes: id, title, price ou pictures.");
     const text=String(description?.plain_text??"").trim(),oldPrice=positiveNumber(item.original_price);
-    return{source:"Mercado Livre",sourceId:id,sourceUrl:String(item.permalink??"")||`https://produto.mercadolivre.com.br/${id}`,title,brand:specifications.find(attribute=>/^(marca|brand)$/i.test(attribute.name))?.value??"",category:String(category?.name??""),shortDescription:text.slice(0,240),description:text,price,oldPrice:oldPrice&&oldPrice>=price?oldPrice:null,images:[...new Set(images)],specifications};
+    return{source:"Mercado Livre",sourceId:id,sourceUrl:String(item.permalink??"")||`https://produto.mercadolivre.com.br/${id}`,title,brand:specifications.find(attribute=>/^(marca|brand)$/i.test(attribute.name))?.value??"",category:String(category?.name??""),shortDescription:text.slice(0,240),description:text,price:price??0,oldPrice:oldPrice&&price&&oldPrice>=price?oldPrice:null,images:[...new Set(images)],specifications,...partial?{warning:"Importação parcial: o Mercado Livre não autorizou o acesso à oferta. Revise e complete manualmente os campos vazios antes de cadastrar."}:{}};
   }catch(error){throw new MercadoLivreImportError("NORMALIZATION_ERROR","Falha ao normalizar os dados retornados pela API oficial do Mercado Livre.",{source:"api"},error)}
 }
 
@@ -111,41 +96,44 @@ function itemWithCatalogAttributes(item:MlItem,product:CatalogProduct|undefined)
 
 export async function importMercadoLivreProduct(rawUrl:string,accessToken:string):Promise<ImportedProduct>{
   if(!accessToken)throw new MercadoLivreImportError("API_UNAUTHORIZED","Access token do Mercado Livre não disponível.");
-  await diagnoseOAuthUser(accessToken);
   const request=<T>(path:string,token=accessToken,optional404=false)=>apiJson<T>(path,token,optional404);
-  const requestItem=<T>(itemId:string)=>apiItem<T>(itemId,accessToken);
   const identifier=parseIdentifier(rawUrl);
-  if(identifier.catalogDetected){
-    if(identifier.itemId){
-      const item=await requestItem<MlItem>(identifier.itemId);
-      const itemCatalogProductId=String(item?.catalog_product_id??"").toUpperCase();
-      if(itemCatalogProductId&&itemCatalogProductId!==identifier.productId)throw new MercadoLivreImportError("OFFER_ITEM_NOT_FOUND",`A oferta ${identifier.itemId} não pertence ao produto de catálogo ${identifier.productId}.`,{productId:identifier.productId,itemId:identifier.itemId});
-      let product:CatalogProduct|undefined;
-      try{product=await request<CatalogProduct>(`/products/${encodeURIComponent(itemCatalogProductId||identifier.productId)}`)}catch(error){if(!(error instanceof MercadoLivreImportError&&error.code==="API_FORBIDDEN"))throw error}
-      const enrichedItem=itemWithCatalogAttributes(item!,product);
-      const [description,category]=await Promise.all([
-        request<{plain_text?:unknown}>(`/items/${encodeURIComponent(identifier.itemId)}/description`,accessToken,true),
-        enrichedItem.category_id?request<{name?:unknown}>(`/categories/${encodeURIComponent(String(enrichedItem.category_id))}`,accessToken,true):undefined,
-      ]);
-      return normalize(enrichedItem,description,category);
-    }
-    try{
-      const resolved=await resolveCatalogProduct<MlItem>(identifier.productId,accessToken,request,requestItem);
-      const combined=catalogAsItem(resolved.product,resolved.item,resolved.offer,rawUrl);
-      const price=positiveNumber(combined.price),pictures=Array.isArray(combined.pictures)?combined.pictures:[];
-      if(!price||!String(combined.title??"").trim()||!pictures.length)throw new MercadoLivreImportError("CATALOG_DATA_INCOMPLETE",`O catálogo ${identifier.productId} não forneceu dados suficientes para preencher o formulário${resolved.itemId?" mesmo após consultar a oferta associada":" e nenhuma oferta válida foi encontrada"}.`,{productId:identifier.productId,itemId:resolved.itemId,missing:[!combined.title?"title":null,!price?"price":null,!pictures.length?"pictures":null].filter(Boolean)});
-      const [description,category]=await Promise.all([
-        resolved.itemId?request<{plain_text?:unknown}>(`/items/${encodeURIComponent(resolved.itemId)}/description`,accessToken,true):undefined,
-        combined.category_id?request<{name?:unknown}>(`/categories/${encodeURIComponent(String(combined.category_id))}`,accessToken,true):undefined,
-      ]);
-      return normalize(combined,description,category);
-    }catch(error){throw error}
+  async function fullItem(itemId:string,item:MlItem){
+    const [description,category]=await Promise.all([
+      request<{plain_text?:unknown}>(`/items/${encodeURIComponent(itemId)}/description`,accessToken,true),
+      item.category_id?request<{name?:unknown}>(`/categories/${encodeURIComponent(String(item.category_id))}`,accessToken,true):undefined,
+    ]);
+    return normalize(item,description,category);
   }
-  const itemId=identifier.itemId;
-  const item=await requestItem<MlItem>(itemId);
-  const [description,category]=await Promise.all([
-    request<{plain_text?:unknown}>(`/items/${encodeURIComponent(itemId)}/description`,accessToken,true),
-    item?.category_id?request<{name?:unknown}>(`/categories/${encodeURIComponent(String(item.category_id))}`,accessToken,true):undefined,
-  ]);
-  return normalize(item!,description,category);
+  async function catalogImport(productId:string,preferredItemId:string|null,itemAlreadyForbidden=false){
+    const resolved=await resolveCatalogProduct<MlItem>(productId,preferredItemId,accessToken,request,async<T>(itemId:string)=>{
+      if(itemAlreadyForbidden)return undefined;
+      return apiItem<T>(itemId,accessToken,true);
+    });
+    if(resolved.item){
+      const itemCatalogProductId=String(resolved.item.catalog_product_id??"").toUpperCase();
+      if(itemCatalogProductId&&itemCatalogProductId!==productId)throw new MercadoLivreImportError("OFFER_ITEM_NOT_FOUND",`A oferta ${resolved.itemId} não pertence ao produto de catálogo ${productId}.`,{productId,itemId:resolved.itemId});
+      return fullItem(resolved.itemId!,itemWithCatalogAttributes(resolved.item,resolved.product));
+    }
+    const combined=catalogAsItem(resolved.product,undefined,resolved.offer,rawUrl);
+    const category=combined.category_id?await request<{name?:unknown}>(`/categories/${encodeURIComponent(String(combined.category_id))}`,accessToken,true):undefined;
+    return normalize(combined,undefined,category,true);
+  }
+  if(identifier.catalogDetected)return catalogImport(identifier.productId,identifier.itemId);
+  if(identifier.userProductId){
+    let itemForbidden=false;
+    if(identifier.itemId){
+      const item=await apiItem<MlItem>(identifier.itemId,accessToken,true);
+      if(item)return fullItem(identifier.itemId,item);
+      itemForbidden=true;
+    }
+    const userProduct=await request<MlUserProduct>(`/user-products/${encodeURIComponent(identifier.userProductId)}`);
+    const productId=String(userProduct?.catalog_product_id??"").toUpperCase();
+    if(productId&&/^MLB[0-9]+$/.test(productId))return catalogImport(productId,identifier.itemId,itemForbidden);
+    const partial: MlItem={id:userProduct?.id,title:userProduct?.name,pictures:userProduct?.pictures,attributes:userProduct?.attributes,category_id:userProduct?.category_id,permalink:rawUrl};
+    return normalize(partial,undefined,undefined,true);
+  }
+  const itemId=identifier.itemId!;
+  const item=await apiItem<MlItem>(itemId,accessToken);
+  return fullItem(itemId,item!);
 }

@@ -1,6 +1,6 @@
 export type MercadoLivreUrlIdentifier=
   |{catalogDetected:true;productId:string;userProductId:null;itemId:string|null}
-  |{catalogDetected:false;productId:null;userProductId:string|null;itemId:string};
+  |{catalogDetected:false;productId:null;userProductId:string|null;itemId:string|null};
 
 const ALLOWED_HOSTS=new Set(["mercadolivre.com.br","www.mercadolivre.com.br","produto.mercadolivre.com.br"]);
 const CATALOG_PRODUCT_ID=/^MLB[0-9]+$/i;
@@ -35,7 +35,7 @@ export function parseMercadoLivreUrl(rawUrl:string):MercadoLivreUrlIdentifier{
   if(catalogProduct)return{catalogDetected:true,productId:catalogProduct,userProductId:null,itemId:queryItem?`MLB${queryItem}`:null};
   if(userProduct){
     if(queryItem)return{catalogDetected:false,productId:null,userProductId:userProduct,itemId:`MLB${queryItem}`};
-    throw new MercadoLivreUrlParserError("USER_PRODUCT_UNSUPPORTED",`O User Product ${userProduct} não contém uma oferta ITEM_ID explícita.`,{userProductId:userProduct});
+    return{catalogDetected:false,productId:null,userProductId:userProduct,itemId:null};
   }
   if(queryItem)return{catalogDetected:false,productId:null,userProductId:null,itemId:`MLB${queryItem}`};
   const normalizedPathname=`/${segments.join("/")}`;
