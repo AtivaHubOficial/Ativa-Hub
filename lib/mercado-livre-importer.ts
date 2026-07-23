@@ -11,7 +11,6 @@ export class MercadoLivreImportError extends Error{constructor(public readonly c
 
 type MlItem={id?:unknown;title?:unknown;price?:unknown;original_price?:unknown;permalink?:unknown;thumbnail?:unknown;pictures?:unknown;attributes?:unknown;category_id?:unknown;catalog_product_id?:unknown};
 type MlApiError={error?:unknown;message?:unknown;code?:unknown;status?:unknown};
-type MlMultiGetEntry<T>={code?:unknown;body?:T&MlApiError};
 
 function parseIdentifier(rawUrl:string){
   try{
@@ -49,12 +48,7 @@ async function apiJson<T>(path:string,accessToken:string,optional404=false):Prom
 }
 
 async function apiItem<T>(itemId:string,accessToken:string):Promise<T>{
-  const endpoint=`/items?ids=${encodeURIComponent(itemId)}`;
-  const entries=await apiJson<Array<MlMultiGetEntry<T>>>(endpoint,accessToken);
-  const entry=Array.isArray(entries)?entries[0]:undefined,status=Number(entry?.code),body=entry?.body;
-  if(status>=200&&status<300&&body)return body as T;
-  const apiCode=String(body?.code??body?.error??""),apiMessage=String(body?.message??"").slice(0,240);
-  throw new MercadoLivreImportError(status===403?"API_FORBIDDEN":status===404?"API_NOT_FOUND":"UNEXPECTED_RESPONSE",`O multiget público do Mercado Livre recusou o item (${status||"status desconhecido"}).`,{endpoint,status:status||502,apiCode,apiMessage,apiResponse:true});
+  return(await apiJson<T>(`/items/${encodeURIComponent(itemId)}`,accessToken))!;
 }
 
 function strings(value:unknown):string[]{if(typeof value==="string")return[value];if(Array.isArray(value))return value.flatMap(strings);if(value&&typeof value==="object"&&"url" in value)return strings((value as{url:unknown}).url);return[]}
