@@ -94,7 +94,7 @@ async function diagnosticGet(label:string,path:string,accessToken:string){
       }catch{message="Resposta JSON inválida."}
     }
   }catch(cause){error="diagnostic_request_failed";message=cause instanceof Error?cause.name:"unknown"}
-  console.info(label,{status,error,message});
+  console.error(label,{status,error,message});
 }
 
 async function diagnoseForbiddenItem(itemId:string,accessToken:string){
