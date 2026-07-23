@@ -1,0 +1,13 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {requestLogzzProducts} from "./connectors/logzz/transport.ts";
+import {LogzzError} from "./connectors/logzz/errors.ts";
+import {mapLogzzCandidates,parseLogzzResponse} from "./connectors/logzz/mapper.ts";
+
+const response={message:"ok",data:{producer:[{name:"Produtor",hash:"p1",description:"<b>Descrição</b>",categories:[],main_image_url:"",specifications:[{name:"Cor",value:"Azul"}],variations:[],offers:[{hash:"o1",name:"Oferta",price:10,scheduling_checkout_url:"https://checkout.test/s",expedition_checkout_url:"https://checkout.test/e"}]}],affiliate:[{name:"Afiliado",hash:"p2",offers:[{hash:"o2",price:20}]}],coproducer:[{name:"Sem oferta",hash:"p3"}]}};
+test("interpreta os três vínculos e campos opcionais",()=>{const parsed=parseLogzzResponse(response);assert.equal(parsed.data.producer.length,1);assert.equal(parsed.data.affiliate.length,1);assert.equal(parsed.data.coproducer[0].offers.length,0);assert.equal(parsed.data.producer[0].categories.length,0);assert.equal(parsed.data.producer[0].main_image_url,undefined)});
+test("gera um candidato por oferta e prefere checkout de expedição",()=>{const candidates=mapLogzzCandidates(parseLogzzResponse(response));assert.equal(candidates[0].id,"logzz:producer:p1:o1");assert.equal(candidates[0].affiliateUrl,"https://checkout.test/e");assert.equal(candidates[1].importable,false)});
+test("mantém identificadores estáveis para sincronização sem duplicidade",()=>{const parsed=parseLogzzResponse(response),first=mapLogzzCandidates(parsed).map(item=>item.id),second=mapLogzzCandidates(parsed).map(item=>item.id);assert.deepEqual(first,second);assert.equal(new Set(first).size,first.length)});
+test("rejeita resposta inválida",()=>assert.throws(()=>parseLogzzResponse({data:null}),error=>error instanceof LogzzError&&error.code==="LOGZZ_INVALID_RESPONSE"));
+test("rejeita token ausente antes de chamar a rede",async()=>{let called=false;const mockFetch=(async()=>{called=true;return new Response()}) as typeof fetch;await assert.rejects(()=>requestLogzzProducts("","https://api.test",mockFetch),error=>error instanceof LogzzError&&error.code==="LOGZZ_NOT_CONFIGURED");assert.equal(called,false)});
+test("mapeia HTTP 401 e 429 sem expor token",async()=>{for(const[status,code]of[[401,"LOGZZ_UNAUTHORIZED"],[429,"LOGZZ_RATE_LIMITED"]] as const){const mockFetch=(async()=>new Response("{}",{status,headers:{"content-type":"application/json"}})) as typeof fetch;await assert.rejects(()=>requestLogzzProducts("segredo","https://api.test",mockFetch),error=>error instanceof LogzzError&&error.code===code&&!error.message.includes("segredo"))}});

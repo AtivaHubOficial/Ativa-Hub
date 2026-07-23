@@ -1,6 +1,6 @@
 "use client";
 import { useEffect,useMemo,useState } from "react";
-import { Plus } from "lucide-react";
+import { Download,Plus } from "lucide-react";
 import Link from "next/link";
 import type { Product } from "@/types/product";
 import EmptyProductsState from "./EmptyProductsState";
@@ -21,7 +21,7 @@ export default function ProductsCatalogClient(){
  const clear=()=>{setSearch("");setCategory("all");setStatus("all");setFeatured("all")};
  async function remove(){if(!deleting)return;const client=createSupabaseBrowserClient();if(!client)return;setBusy(true);const{error:deleteError}=await client.from("products").delete().eq("id",deleting.id);if(deleteError){setFeedback(deleteError.message);setBusy(false);return}const prefix=`products/${deleting.id}/`;const{data}=await client.storage.from("product-images").list(prefix);if(data?.length)await client.storage.from("product-images").remove(data.map(x=>`${prefix}${x.name}`));setFeedback("Produto excluído com sucesso.");setDeleting(null);setBusy(false);load()}
  return <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-  <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="text-sm font-bold uppercase tracking-wider text-amber-600">Catálogo</p><h1 className="mt-1 text-3xl font-black">Produtos</h1><p className="mt-2 text-slate-600">Gerencie os produtos persistidos no Supabase.</p></div><Link href="/admin/produtos/novo" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-bold text-white"><Plus size={18}/>Adicionar produto</Link></section>
+  <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="text-sm font-bold uppercase tracking-wider text-amber-600">Catálogo</p><h1 className="mt-1 text-3xl font-black">Produtos</h1><p className="mt-2 text-slate-600">Gerencie os produtos persistidos no Supabase.</p></div><div className="flex flex-wrap gap-3"><Link href="/admin/produtos/importar-logzz" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold"><Download size={18}/>Importar da Logzz</Link><Link href="/admin/produtos/novo" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-bold text-white"><Plus size={18}/>Adicionar produto</Link></div></section>
   <section className="rounded-2xl border bg-white p-4 shadow-sm"><ProductsToolbar search={search} category={category} status={status} featured={featured} categories={categories} hasFilters={Boolean(search)||category!=="all"||status!=="all"||featured!=="all"} onSearchChange={setSearch} onCategoryChange={setCategory} onStatusChange={setStatus} onFeaturedChange={setFeatured} onClear={clear}/></section>
   {feedback?<p className="rounded-xl bg-emerald-50 p-3 text-sm font-bold text-emerald-700">{feedback}</p>:null}
   {loading?<p>Carregando produtos…</p>:error?<div className="rounded-xl border border-red-200 bg-red-50 p-5"><p>{error}</p><button onClick={load} className="mt-3 font-bold">Tentar novamente</button></div>:<><div className="flex justify-between text-sm"><b>{filtered.length} produto(s) encontrado(s)</b><span>Total: {products.length}</span></div>{filtered.length?<ProductsList products={filtered} onDelete={setDeleting}/>:<EmptyProductsState onClear={clear}/>}</>}

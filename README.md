@@ -144,3 +144,23 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
 Não foi criada migration e nenhuma alteração foi aplicada ao banco remoto.
+
+## Sprint 3.2 — Conector oficial Logzz
+
+O painel administrativo possui a opção **Importar da Logzz**, que carrega produtos de afiliado, produtor e coprodutor pela API oficial. Cada oferta é selecionada individualmente e sincronizada pela combinação `source + external_product_id + external_offer_id`, sem duplicar produtos.
+
+Configure apenas no servidor:
+
+```env
+LOGZZ_API_TOKEN=
+LOGZZ_API_BASE_URL=https://app.logzz.com.br/api/v1
+```
+
+1. Crie o token no painel da Logzz.
+2. Preencha as variáveis em `.env.local` para desenvolvimento.
+3. Execute `supabase/migrations/20260723_sprint_3_2_logzz.sql`.
+4. Na Vercel, adicione as duas variáveis em **Project Settings > Environment Variables**.
+5. Faça um novo deploy.
+6. Entre no painel administrativo, abra **Produtos > Importar da Logzz**, carregue o catálogo e selecione as ofertas.
+
+O token nunca usa prefixo `NEXT_PUBLIC_`, não é enviado ao navegador e não é armazenado no Supabase.

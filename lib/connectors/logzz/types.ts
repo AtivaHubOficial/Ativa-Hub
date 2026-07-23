@@ -1,0 +1,10 @@
+export type LogzzProductRole="producer"|"affiliate"|"coproducer";
+export type LogzzCategory={name?:string;title?:string};
+export type LogzzSpecification={name?:string;value?:unknown};
+export type LogzzVariation=Record<string,unknown>;
+export type LogzzOrderBump=Record<string,unknown>;
+export type LogzzCoupon=Record<string,unknown>;
+export type LogzzOffer={hash:string;name:string;price:number;scheduling_checkout_url?:string;expedition_checkout_url?:string;order_bumps:LogzzOrderBump[];available_coupons:LogzzCoupon[]};
+export type LogzzProduct={name:string;hash:string;description:string;categories:LogzzCategory[];warranty_time?:number;main_image_url?:string;specifications:LogzzSpecification[];variations:LogzzVariation[];offers:LogzzOffer[]};
+export type LogzzProductsResponse={message:string;data:Record<LogzzProductRole,LogzzProduct[]>};
+export type LogzzImportCandidate={id:string;role:LogzzProductRole;externalProductId:string;externalOfferId:string;name:string;description:string;category:string;imageUrl:string;price:number;affiliateUrl:string;schedulingCheckoutUrl?:string;expeditionCheckoutUrl?:string;warrantyTime?:number;offerName:string;specifications:Record<string,unknown>;importable:boolean;unavailableReason?:string};
