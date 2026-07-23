@@ -31,12 +31,35 @@ export function getMercadoLivreItemId(rawUrl:string):string{
 function isTimeout(error:unknown){return error instanceof Error&&(error.name==="AbortError"||error.name==="TimeoutError"||/timeout/i.test(error.message))}
 async function apiJson<T>(path:string,accessToken:string,optional404=false):Promise<T|undefined>{
   const url=`${API_ORIGIN}${path}`;
+  const method="GET";
+  const headers=mercadoLivreAuthorizationHeaders(accessToken);
+  const headerNames=Object.keys(headers).map(name=>name.toLowerCase());
+  console.info("[product-import] Mercado Livre API request diagnostic",{
+    baseUrl:new URL(url).origin,
+    method,
+    endpoint:path,
+    authorizationHeaderPresent:headerNames.includes("authorization"),
+    xAccessTokenHeaderPresent:headerNames.includes("x-access-token"),
+    userAgent:headers["User-Agent"],
+  });
   let response:Response;
-  try{response=await fetch(url,{headers:mercadoLivreAuthorizationHeaders(accessToken),cache:"no-store",signal:AbortSignal.timeout(TIMEOUT_MS)})}
+  try{response=await fetch(url,{method,headers,cache:"no-store",signal:AbortSignal.timeout(TIMEOUT_MS)})}
   catch(error){if(isTimeout(error))throw new MercadoLivreImportError("TIMEOUT","A API do Mercado Livre excedeu 10 segundos.",{endpoint:path},error);throw new MercadoLivreImportError("NETWORK_ERROR","Erro de rede ao consultar a API do Mercado Livre.",{endpoint:path},error)}
   const contentType=response.headers.get("content-type")??"";
   let body:unknown;
   if(contentType.includes("json")){try{body=await response.json()}catch(error){throw new MercadoLivreImportError("UNEXPECTED_RESPONSE","A API do Mercado Livre retornou JSON inválido.",{endpoint:path,status:response.status},error)}}
+  const safeResponseBody=body&&typeof body==="object"&&!Array.isArray(body)?body as MlApiError:{};
+  console.info("[product-import] Mercado Livre API response diagnostic",{
+    baseUrl:new URL(url).origin,
+    method,
+    endpoint:path,
+    status:response.status,
+    body:{
+      error:safeResponseBody.error,
+      message:safeResponseBody.message,
+      status:safeResponseBody.status,
+    },
+  });
   const apiError=body&&typeof body==="object"?body as MlApiError:{};
   const details={endpoint:path,status:response.status,apiCode:String(apiError.code??apiError.error??""),apiMessage:String(apiError.message??"").slice(0,240),apiResponse:true};
   if(response.status===404){if(optional404)return undefined;throw new MercadoLivreImportError("API_NOT_FOUND","A API do Mercado Livre não encontrou o recurso.",details)}
@@ -48,7 +71,36 @@ async function apiJson<T>(path:string,accessToken:string,optional404=false):Prom
 }
 
 async function apiItem<T>(itemId:string,accessToken:string):Promise<T>{
-  return(await apiJson<T>(`/items/${encodeURIComponent(itemId)}`,accessToken))!;
+  try{return(await apiJson<T>(`/items/${encodeURIComponent(itemId)}`,accessToken))!}
+  catch(error){
+    if(error instanceof MercadoLivreImportError&&error.code==="API_FORBIDDEN")await diagnoseForbiddenItem(itemId,accessToken);
+    throw error;
+  }
+}
+
+async function diagnosticGet(label:string,path:string,accessToken:string){
+  let status=0,error="",message="";
+  try{
+    const response=await fetch(`${API_ORIGIN}${path}`,{method:"GET",headers:mercadoLivreAuthorizationHeaders(accessToken),cache:"no-store",signal:AbortSignal.timeout(TIMEOUT_MS)});
+    status=response.status;
+    if((response.headers.get("content-type")??"").includes("json")){
+      try{
+        const parsed=await response.json() as unknown;
+        const entry=Array.isArray(parsed)&&parsed[0]&&typeof parsed[0]==="object"?parsed[0] as{code?:unknown;body?:MlApiError}:undefined;
+        const body=entry?.body??(parsed&&typeof parsed==="object"?parsed as MlApiError:{});
+        if(entry?.code!==undefined)status=Number(entry.code)||status;
+        error=String(body.error??body.code??"");
+        message=String(body.message??"").slice(0,240);
+      }catch{message="Resposta JSON inválida."}
+    }
+  }catch(cause){error="diagnostic_request_failed";message=cause instanceof Error?cause.name:"unknown"}
+  console.info(label,{status,error,message});
+}
+
+async function diagnoseForbiddenItem(itemId:string,accessToken:string){
+  const encodedItemId=encodeURIComponent(itemId);
+  await diagnosticGet("[product-import] item attributes diagnostic",`/items/${encodedItemId}?attributes=id,title,price,thumbnail,permalink`,accessToken);
+  await diagnosticGet("[product-import] item multiget diagnostic",`/items?ids=${encodedItemId}&attributes=id,title`,accessToken);
 }
 
 function strings(value:unknown):string[]{if(typeof value==="string")return[value];if(Array.isArray(value))return value.flatMap(strings);if(value&&typeof value==="object"&&"url" in value)return strings((value as{url:unknown}).url);return[]}
