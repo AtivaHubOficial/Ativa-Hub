@@ -10,8 +10,9 @@ export type DescriptionSection = { title: string; paragraphs: string[]; items: s
 import { sanitizeProductDescription } from "./safe-description.ts";
 
 const headings: Record<string, string> = {
-  caracteristicas: "Características", beneficios: "Benefícios", especificacoes: "Especificações técnicas",
+  caracteristicas: "Características", beneficios: "Benefícios", "principais beneficios": "Principais benefícios", especificacoes: "Especificações técnicas",
   "especificacoes tecnicas": "Especificações técnicas", "itens inclusos": "Itens inclusos",
+  "recursos e especificacoes": "Recursos e especificações", "conteudo informado da embalagem": "Conteúdo informado da embalagem",
   "conteudo da embalagem": "Conteúdo da embalagem", "informacoes adicionais": "Informações adicionais",
   "perguntas frequentes": "Perguntas frequentes", "chamada para acao": "Chamada para ação",
 };

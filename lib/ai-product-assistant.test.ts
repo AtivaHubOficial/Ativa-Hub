@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { suggestExistingCategory, TemplateProductProvider } from "./ai-product-assistant.ts";
+import { hasApplicableAIContent, suggestExistingCategory, TemplateProductProvider } from "./ai-product-assistant.ts";
 import { parseProductDescription } from "./product-description.ts";
 
 test("gera pacote comercial completo sem HTML executável", async () => {
@@ -15,8 +15,8 @@ test("gera pacote comercial completo sem HTML executável", async () => {
   });
   assert.equal(content.title.includes("<script>"), false);
   assert.equal(content.category, "Ferramentas");
-  assert.equal(content.slug, "furadeira-de-impacto-marca-x");
-  assert.ok(content.description.includes("## Benefícios"));
+  assert.equal(content.slug, "furadeira-de-impacto-marca-x-500-w");
+  assert.ok(content.description.includes("## Principais benefícios"));
   assert.ok(content.description.includes("## Perguntas frequentes"));
   assert.ok(content.keywords.includes("Ferramentas"));
   assert.equal(content.metaTitle.length <= 60, true);
@@ -29,7 +29,7 @@ test("descrição Markdown gerada é convertida em seções seguras", async () =
     specifications: [{ name: "Potência", value: "500 W" }],
   });
   const sections = parseProductDescription(content.description);
-  assert.ok(sections.some((section) => section.title === "Benefícios"));
+  assert.ok(sections.some((section) => section.title === "Principais benefícios"));
   assert.ok(sections.some((section) => section.title === "Perguntas frequentes"));
   assert.ok(sections.some((section) => section.title === "Chamada para ação"));
 });
@@ -116,4 +116,79 @@ test("categoria considera marca, descrição e especificações, mas nunca cria 
     categories,
   }), "Agro");
   assert.equal(suggestExistingCategory({ title: "Scanner OBD", categories }), "Geral");
+});
+
+test("título comercial usa marca, modelo e atributos sem truncar palavras", async () => {
+  const content = await new TemplateProductProvider().generate({
+    title: "PARAFUSADEIRA FURADEIRA IMPACTO SUPER OFERTA ORIGINAL KIT COMPLETO",
+    brand: "WAP",
+    specifications: [
+      { name: "Modelo", value: "K21" },
+      { name: "Modelo detalhado", value: "K21 ID03" },
+      { name: "Torque máximo", value: "60 Nm" },
+      { name: "Alimentação", value: "Sem fio" },
+      { name: "Acessórios", value: "Maleta" },
+    ],
+  });
+  assert.equal(content.title, "Parafusadeira e furadeira de impacto WAP K21 ID03 60 Nm sem fio");
+  assert.ok(content.title.length <= 90);
+  assert.equal(/\b(?:Clipe de c|manusei)\b/i.test(content.title), false);
+});
+
+test("descrição é natural, estruturada e não começa com frases proibidas", async () => {
+  const content = await new TemplateProductProvider().generate({
+    title: "Parafusadeira e furadeira",
+    brand: "WAP",
+    specifications: [
+      { name: "Torque máximo", value: "60 Nm" },
+      { name: "Luz LED", value: "Sim" },
+      { name: "Conteúdo da embalagem", value: "Maleta e carregador" },
+    ],
+  });
+  assert.doesNotMatch(content.shortDescription, /^(reúne modelo|foi selecionado|para quem busca)/i);
+  assert.match(content.description, /## Principais benefícios/);
+  assert.match(content.description, /## Recursos e especificações/);
+  assert.match(content.description, /## Conteúdo informado da embalagem/);
+  assert.match(content.description, /## Perguntas frequentes/);
+  assert.match(content.description, /## Chamada para ação/);
+});
+
+test("modelo e modelo detalhado não viram benefícios nem duplicam FAQ", async () => {
+  const content = await new TemplateProductProvider().generate({
+    title: "Furadeira",
+    specifications: [
+      { name: "Modelo", value: "K21" },
+      { name: "Modelo detalhado", value: "K21 ID03" },
+      { name: "Torque", value: "60 Nm" },
+      { name: "Torque máximo", value: "60 Nm" },
+    ],
+  });
+  assert.equal(content.benefits.some((item) => /modelo/i.test(item)), false);
+  assert.equal(new Set(content.faq.map((item) => item.question)).size, content.faq.length);
+  assert.equal(content.faq.filter((item) => /torque/i.test(item.question)).length, 1);
+});
+
+test("descarta especificações incompletas dos benefícios", async () => {
+  const content = await new TemplateProductProvider().generate({
+    title: "Parafusadeira",
+    specifications: [
+      { name: "Acessórios", value: "Clipe de c" },
+      { name: "Peso", value: "manusei" },
+      { name: "Mandril", value: "13 mm" },
+    ],
+  });
+  assert.equal(content.benefits.some((item) => /Clipe de c|manusei/i.test(item)), false);
+  assert.ok(content.benefits.some((item) => /13 mm/i.test(item)));
+});
+
+test("conteúdo aplicável define sucesso e resposta vazia define erro", () => {
+  const valid = {
+    title: "Título", slug: "titulo", brand: "", category: "", shortDescription: "", description: "",
+    benefits: [], faq: [], cta: "", metaTitle: "", metaDescription: "", openGraphDescription: "",
+    keywords: [], specifications: [], provider: "template" as const,
+  };
+  const empty = { ...valid, title: "", slug: "" };
+  assert.equal(hasApplicableAIContent(valid, "all"), true);
+  assert.equal(hasApplicableAIContent(empty, "all"), false);
+  assert.equal(hasApplicableAIContent(empty, "benefits"), false);
 });
