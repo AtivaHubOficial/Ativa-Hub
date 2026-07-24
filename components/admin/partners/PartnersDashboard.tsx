@@ -22,7 +22,7 @@ export default function PartnersDashboard() {
   const [partners, setPartners] = useState<PartnerOverview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [diagnostics, setDiagnostics] = useState<{ checkedAt: string; itemId: string | null; results: MercadoLivreDiagnosticResult[] } | null>(null);
+  const [diagnostics, setDiagnostics] = useState<{ checkedAt: string; userId: string | null; itemId: string | null; results: MercadoLivreDiagnosticResult[] } | null>(null);
   const [diagnosing, setDiagnosing] = useState(false);
   const load = () => {
     setLoading(true);
@@ -47,9 +47,9 @@ export default function PartnersDashboard() {
     setDiagnosing(true); setError("");
     try {
       const response = await fetch("/api/admin/partners/mercado-livre/diagnostics", { cache: "no-store" });
-      const body = await response.json() as { checkedAt?: string; itemId?: string | null; results?: MercadoLivreDiagnosticResult[]; error?: string };
+      const body = await response.json() as { checkedAt?: string; userId?: string | null; itemId?: string | null; results?: MercadoLivreDiagnosticResult[]; error?: string };
       if (!response.ok) throw new Error(body.error ?? "Não foi possível executar o diagnóstico.");
-      setDiagnostics({ checkedAt: body.checkedAt ?? new Date().toISOString(), itemId: body.itemId ?? null, results: body.results ?? [] });
+      setDiagnostics({ checkedAt: body.checkedAt ?? new Date().toISOString(), userId: body.userId ?? null, itemId: body.itemId ?? null, results: body.results ?? [] });
       load();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível executar o diagnóstico."); }
     finally { setDiagnosing(false); }
@@ -71,7 +71,7 @@ export default function PartnersDashboard() {
           ))}
         </div>
       )}
-      {diagnostics?<section className="rounded-2xl border bg-white p-5 shadow-sm"><div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-black">Diagnóstico oficial do Mercado Livre</h2><p className="mt-1 text-sm text-slate-500">Executado em {formatDate(diagnostics.checkedAt)}{diagnostics.itemId?` · Item testado: ${diagnostics.itemId}`:""}</p></div></div><div className="mt-4 grid gap-3">{diagnostics.results.map((result)=><article key={result.endpoint} className="grid gap-2 rounded-xl border p-4 md:grid-cols-[auto_1fr_auto] md:items-center"><span className="text-xl" aria-label={result.tone==="ok"?"OK":result.tone==="warning"?"Warning":"Erro"}>{result.tone==="ok"?"🟢":result.tone==="warning"?"🟡":"🔴"}</span><div><code className="break-all text-sm font-bold">{result.endpoint}</code><p className="mt-1 whitespace-pre-line text-sm text-slate-600">{result.message}</p><p className="mt-1 text-xs text-slate-400">Código: {result.code}</p></div><div className="text-right text-sm"><b>{result.status??"Sem resposta"}</b><span className="block text-slate-500">{result.durationMs} ms</span></div></article>)}</div></section>:null}
+      {diagnostics?<section className="rounded-2xl border bg-white p-5 shadow-sm"><div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-black">Diagnóstico oficial do Mercado Livre</h2><p className="mt-1 text-sm text-slate-500">Executado em {formatDate(diagnostics.checkedAt)}{diagnostics.userId?` · USER_ID: ${diagnostics.userId}`:""}{diagnostics.itemId?` · Item testado: ${diagnostics.itemId}`:""}</p></div></div><div className="mt-4 grid gap-3">{diagnostics.results.map((result)=><article key={result.endpoint} className="grid gap-2 rounded-xl border p-4 md:grid-cols-[auto_1fr_auto] md:items-center"><span className="text-xl" aria-label={result.tone==="ok"?"OK":result.tone==="warning"?"Warning":"Erro"}>{result.tone==="ok"?"🟢":result.tone==="warning"?"🟡":"🔴"}</span><div><code className="break-all text-sm font-bold">{result.endpoint}</code><p className="mt-1 whitespace-pre-line text-sm text-slate-600">{result.message}</p><p className="mt-1 text-xs text-slate-400">Código: {result.code}</p></div><div className="text-right text-sm"><b>{result.status??"Sem resposta"}</b><span className="block text-slate-500">{result.durationMs} ms</span></div></article>)}</div></section>:null}
     </main>
   );
 }

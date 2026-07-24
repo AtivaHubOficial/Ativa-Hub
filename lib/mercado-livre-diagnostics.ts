@@ -79,11 +79,23 @@ export async function runMercadoLivreDiagnostics(
     }
   }
 
-  const [me, meAttributes] = await Promise.all([
-    call<{ id?: unknown; nickname?: unknown }>("/users/me"),
-    call<{ id?: unknown; nickname?: unknown }>("/users/me?attributes=id,nickname"),
-  ]);
-  const search = await call<SearchBody>("/users/me/items/search?limit=1");
+  const me = await call<{ id?: unknown; nickname?: unknown }>("/users/me");
+  const userId = me.body?.id == null ? null : String(me.body.id);
+  const validUserId = userId && /^\d+$/.test(userId) ? userId : null;
+  const meAttributes = await call<{ id?: unknown; nickname?: unknown }>("/users/me?attributes=id,nickname");
+  const search = validUserId
+    ? await call<SearchBody>(`/users/${encodeURIComponent(validUserId)}/items/search?limit=1`)
+    : {
+        result: {
+          endpoint: "/users/{USER_ID}/items/search?limit=1",
+          status: null,
+          code: "USER_ID_MISSING",
+          message: "A API não retornou um USER_ID numérico em /users/me.",
+          durationMs: 0,
+          tone: "error" as const,
+        },
+        body: undefined,
+      };
   const itemId = Array.isArray(search.body?.results) && typeof search.body.results[0] === "string"
     ? search.body.results[0]
     : null;
@@ -97,8 +109,9 @@ export async function runMercadoLivreDiagnostics(
   }
   return {
     checkedAt: new Date().toISOString(),
+    userId: validUserId,
     account: {
-      id: me.body?.id == null ? null : String(me.body.id),
+      id: validUserId,
       nickname: me.body?.nickname == null ? null : String(me.body.nickname),
     },
     itemId,

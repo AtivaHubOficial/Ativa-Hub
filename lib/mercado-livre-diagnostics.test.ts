@@ -22,14 +22,26 @@ test("executa detalhes somente quando a busca retorna item e não expõe token",
   };
   const result = await runMercadoLivreDiagnostics("segredo-oauth", request as typeof fetch, 1000);
   assert.equal(result.results.length, 5);
+  assert.equal(result.userId, "123");
   assert.equal(result.itemId, "MLB1234567890");
   assert.equal(JSON.stringify(result).includes("segredo-oauth"), false);
   assert.equal(urls.some((url) => url.endsWith("/items/MLB1234567890")), true);
+  assert.equal(urls.some((url) => url.includes("/users/123/items/search?limit=1")), true);
+  assert.equal(urls.some((url) => url.includes("/users/me/items/search")), false);
 });
 
-test("busca vazia vira warning e não consulta item", async () => {
-  const request = async () => new Response(JSON.stringify({ results: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
+test("busca vazia vira warning e não consulta item", async (context) => {
+  const request = context.mock.fn(async (input: string | URL | Request) => new Response(JSON.stringify(String(input).endsWith("/users/me") ? { id: 456 } : { results: [] }), { status: 200, headers: { "Content-Type": "application/json" } }));
   const result = await runMercadoLivreDiagnostics("token", request as typeof fetch, 1000);
   assert.equal(result.results.length, 3);
   assert.equal(result.results[2].tone, "warning");
+  assert.equal(result.results[2].endpoint, "/users/456/items/search?limit=1");
+});
+
+test("não chama busca com placeholder quando users/me não retorna ID", async (context) => {
+  const request = context.mock.fn(async () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }));
+  const result = await runMercadoLivreDiagnostics("token", request as typeof fetch, 1000);
+  assert.equal(result.userId, null);
+  assert.equal(result.results[2].code, "USER_ID_MISSING");
+  assert.equal(request.mock.callCount(), 2);
 });
