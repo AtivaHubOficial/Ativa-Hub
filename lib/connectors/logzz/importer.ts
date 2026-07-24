@@ -4,6 +4,7 @@ import { normalizeSlug } from "@/types/product-draft";
 import type { LogzzImportCandidate } from "./types";
 import { planLogzzSync } from "./sync";
 import { resolveKnownCategory } from "@/lib/category-utils";
+import { defaultAIProductProvider } from "@/lib/ai-product-assistant";
 
 export type LogzzImportSummary = {
   created: number;
@@ -80,14 +81,23 @@ export async function importLogzzCandidates(
       .filter((item) => item.name && item.value);
     const category = resolveKnownCategory(candidate.category, categoryNames);
     const categoryId = (categoryRows ?? []).find((row) => row.name === category)?.id ?? null;
+    const commercial = await defaultAIProductProvider.generate({
+      title: candidate.name,
+      category,
+      categories: categoryNames,
+      description: candidate.description,
+      price: candidate.price,
+      source: "Logzz",
+      specifications,
+    });
     const payload = {
       source: "logzz",
       external_product_id: candidate.externalProductId,
       external_offer_id: candidate.externalOfferId,
       external_offer_name: candidate.offerName,
-      title: candidate.name,
-      slug: `${normalizeSlug(candidate.name) || "produto"}-${normalizeSlug(candidate.externalOfferId).slice(-12)}`,
-      brand: "",
+      title: commercial.title,
+      slug: `${commercial.slug || normalizeSlug(candidate.name) || "produto"}-${normalizeSlug(candidate.externalOfferId).slice(-12)}`,
+      brand: commercial.brand,
       category,
       category_id: categoryId,
       subcategory: null,
@@ -101,14 +111,14 @@ export async function importLogzzCandidates(
       installment_text: "",
       image_url: candidate.imageUrl,
       gallery: candidate.imageUrl ? [candidate.imageUrl] : [],
-      description: candidate.description,
-      short_description: candidate.description.slice(0, 240),
-      features: [],
-      tags: ["logzz", candidate.role],
+      description: commercial.description,
+      short_description: commercial.shortDescription,
+      features: commercial.benefits,
+      tags: [...new Set(["logzz", candidate.role, ...commercial.keywords])],
       affiliate_url: candidate.affiliateUrl,
       status: "active",
       featured: false,
-      specifications,
+      specifications: commercial.specifications,
     };
     const { error } = await client
       .from("products")
