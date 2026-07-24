@@ -7,6 +7,7 @@ export type ProductDetails = {
 };
 
 export type DescriptionSection = { title: string; paragraphs: string[]; items: string[]; entries: Array<[string, string]> };
+import { sanitizeProductDescription } from "@/lib/safe-description";
 
 const headings: Record<string, string> = {
   caracteristicas: "Características", beneficios: "Benefícios", especificacoes: "Especificações técnicas",
@@ -17,7 +18,7 @@ const headings: Record<string, string> = {
 const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/:$/, "").trim();
 
 export function parseProductDescription(description: string): DescriptionSection[] {
-  const lines = description.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = sanitizeProductDescription(description).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (!lines.length) return [];
   const sections: DescriptionSection[] = [{ title: "Descrição", paragraphs: [], items: [], entries: [] }];
   for (const line of lines) {

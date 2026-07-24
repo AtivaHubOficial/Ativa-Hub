@@ -1,4 +1,5 @@
 export type ProductStatus = "active" | "draft" | "paused";
+export type ProductSource = "manual" | "logzz" | "mercado_livre";
 
 export type Product = {
   id: string;
@@ -25,5 +26,7 @@ export type Product = {
   featured?: boolean;
   shortDescription?: string;
   specifications?: Array<{ name: string; value: string }>;
+  source?: ProductSource;
+  externalOfferName?: string;
   createdAt: string;
 };

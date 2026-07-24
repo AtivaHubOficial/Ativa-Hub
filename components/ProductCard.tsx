@@ -4,7 +4,7 @@ import { money } from "@/lib/data";
 import { Product } from "@/types/product";
 import ProductImage from "@/components/product/ProductImage";
 
-export default function ProductCard({ product }: { product: Product }) {
+export default function ProductCard({ product, showEmptyRatings = false }: { product: Product; showEmptyRatings?: boolean }) {
   const discount = product.oldPrice
     ? Math.round((1 - product.price / product.oldPrice) * 100)
     : 0;
@@ -22,10 +22,10 @@ export default function ProductCard({ product }: { product: Product }) {
         </Link>
 
         <div className="flex flex-1 flex-col p-5">
-          <div className="mb-2 flex items-center gap-1 text-sm font-bold text-amber-500">
+          {product.reviewCount > 0 ? <div className="mb-2 flex items-center gap-1 text-sm font-bold text-amber-500">
             <Star size={16} fill="currentColor" /> {product.rating.toFixed(1)}
             <span className="font-normal text-slate-500">({product.reviewCount.toLocaleString("pt-BR")})</span>
-          </div>
+          </div> : showEmptyRatings ? <p className="mb-2 text-sm text-slate-500">Sem avaliações</p> : null}
 
           <Link href={`/produto/${product.id}`} className="line-clamp-2 font-bold text-slate-900 hover:underline">
             {product.title}
@@ -42,14 +42,20 @@ export default function ProductCard({ product }: { product: Product }) {
             {product.fullShipping && <span className="flex items-center gap-1 rounded-full bg-blue-50 px-2 py-1 text-blue-700"><BadgeCheck size={14}/> Envio Full</span>}
           </div>
 
-          <a
-            href={product.affiliateUrl}
-            target="_blank"
-            rel="nofollow sponsored noopener"
-            className="mt-5 block rounded-xl bg-green-600 px-4 py-3 text-center font-black text-white hover:bg-green-700"
-          >
-            Comprar no site parceiro
-          </a>
+          {product.affiliateUrl ? (
+            <a
+              href={product.affiliateUrl}
+              target="_blank"
+              rel="nofollow sponsored noopener noreferrer"
+              className="mt-5 block rounded-xl bg-green-600 px-4 py-3 text-center font-black text-white hover:bg-green-700"
+            >
+              Comprar no site parceiro
+            </a>
+          ) : (
+            <span className="mt-5 block cursor-not-allowed rounded-xl bg-slate-200 px-4 py-3 text-center font-black text-slate-500">
+              Checkout indisponível
+            </span>
+          )}
         </div>
       </div>
     </article>

@@ -17,6 +17,7 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       { protocol: "https", hostname: "http2.mlstatic.com" },
       { protocol: "https", hostname: "placehold.co" },
+      { protocol: "https", hostname: "logzz-s3.s3.us-east-2.amazonaws.com" },
       ...(supabaseHostname
         ? [{
             protocol: "https" as const,

@@ -1,0 +1,24 @@
+export type PlatformSettings = {
+  platformName: string;
+  shortDescription: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  contactEmail: string;
+  whatsapp: string;
+  instagramUrl: string;
+  facebookUrl: string;
+  partnerNotice: string;
+  primaryButtonText: string;
+  productsPerPage: number;
+  defaultCategory: string;
+  showEmptyRatings: boolean;
+  showProductsWithoutImage: boolean;
+  showInactiveProducts: boolean;
+  seoTitle: string;
+  seoDescription: string;
+  logoUrl: string;
+  coverImageUrl: string;
+  faviconUrl: string;
+  primaryColor: string;
+  accentColor: string;
+};

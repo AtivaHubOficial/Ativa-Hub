@@ -3,7 +3,7 @@ import {useState} from "react";
 import {ChevronDown,Link2,Sparkles,WandSparkles} from "lucide-react";
 import type {ImportedProduct} from "@/types/product-import";
 
-type ImportResponse={product?:ImportedProduct;authorizeUrl?:string};
+type ImportResponse={product?:ImportedProduct;authorizeUrl?:string;error?:string};
 
 export default function SmartImporter({onImported}:{onImported:(product:ImportedProduct)=>void}){
   const[url,setUrl]=useState("");
@@ -19,12 +19,12 @@ export default function SmartImporter({onImported}:{onImported:(product:Imported
       const body=await response.json() as ImportResponse;
       if(!response.ok||!body.product){
         if(body.authorizeUrl)setAuthorizeUrl(body.authorizeUrl);
-        throw new Error();
+        throw new Error(body.error??"Importação automática indisponível para este produto.");
       }
       onImported(body.product);
       setMessage(body.product.warning??"Dados importados. Revise os campos antes de cadastrar.");
-    }catch{
-      setMessage("Importação automática indisponível para este produto.\nVocê ainda pode cadastrar o produto manualmente.");
+    }catch(error){
+      setMessage(`${error instanceof Error?error.message:"Importação automática indisponível para este produto."}\nVocê ainda pode cadastrar o produto manualmente.`);
     }finally{setPending(false)}
   }
 

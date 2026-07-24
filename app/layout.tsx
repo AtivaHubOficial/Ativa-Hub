@@ -1,10 +1,15 @@
 import type { Metadata } from "next";
+import { getServerPlatformSettings } from "@/lib/platform-settings-server";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: "Ativa Hub — Ofertas selecionadas",
-  description: "Vitrine independente de produtos e ofertas selecionadas."
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getServerPlatformSettings();
+  return {
+    title: settings.seoTitle,
+    description: settings.seoDescription,
+    icons: settings.faviconUrl ? { icon: settings.faviconUrl } : undefined,
+  };
+}
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
