@@ -6,6 +6,7 @@ export type AIProductInput = {
   description?: string;
   price?: number;
   source?: string;
+  productUrl?: string;
   categories?: string[];
   specifications?: Array<{ name: string; value: string }>;
 };
