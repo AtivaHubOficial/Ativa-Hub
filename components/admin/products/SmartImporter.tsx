@@ -3,6 +3,7 @@ import {useRef,useState} from "react";
 import {ChevronDown,Link2,Sparkles} from "lucide-react";
 import type {ImportedProduct} from "@/types/product-import";
 import AIProductAssistant from "@/components/admin/products/AIProductAssistant";
+import { detectProductSource, PRODUCT_SOURCE_CAPABILITIES, productSourceAction, productSourceMessage } from "@/lib/product-source-capabilities";
 
 type ImportResponse={product?:ImportedProduct;authorizeUrl?:string;error?:string};
 
@@ -17,6 +18,10 @@ export default function SmartImporter({onImported}:{onImported:(product:Imported
 
   async function run(){
     if(inFlight.current)return;
+    const source=detectProductSource(url),action=productSourceAction(source);
+    setMessage("");setAuthorizeUrl("");
+    if(action==="manual"){setStage("idle");setMessage(`${productSourceMessage(source)}\nO cadastro manual permanece disponível abaixo.`);return}
+    if(action==="logzz_import"){window.location.assign("/admin/produtos/importar-logzz");return}
     inFlight.current=true;setPending(true);setStage("importing");setMessage("");setAuthorizeUrl("");
     let imported=false;
     try{
@@ -42,7 +47,7 @@ export default function SmartImporter({onImported}:{onImported:(product:Imported
       </div>
     </div>
     <button type="button" aria-expanded={experimentalOpen} onClick={()=>setExperimentalOpen(value=>!value)} className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-slate-600 underline underline-offset-4">Importação experimental <ChevronDown className={experimentalOpen?"rotate-180":""} size={16}/></button>
-    {experimentalOpen?<div className="mt-4 border-t border-amber-200 pt-4"><p className="text-sm text-slate-600">Este recurso pode não funcionar para todos os produtos e nunca impede o cadastro manual.</p><div className="mt-3 flex flex-col gap-2 sm:flex-row"><label className="relative flex-1"><span className="sr-only">URL do produto</span><Link2 className="absolute left-3 top-3.5 text-slate-400" size={18}/><input type="url" value={url} onChange={event=>setUrl(event.target.value)} placeholder="https://www.mercadolivre.com.br/..." className="min-h-12 w-full rounded-xl border border-amber-200 bg-white pl-10 pr-3 text-sm outline-none focus:border-amber-500"/></label><button type="button" onClick={run} disabled={pending||!url.trim()} className="min-h-12 rounded-xl bg-slate-900 px-5 font-bold text-white disabled:opacity-50">{pending?"Importando…":"Tentar importar"}</button></div>{authorizeUrl?<a href={authorizeUrl} className="mt-3 inline-flex min-h-11 items-center rounded-xl bg-amber-400 px-4 text-sm font-black text-slate-950">Conectar Mercado Livre</a>:null}</div>:null}
+    {experimentalOpen?<div className="mt-4 border-t border-amber-200 pt-4"><p className="text-sm text-slate-600">Fontes com importação automática: Mercado Livre e Logzz. O recurso experimental pode não funcionar para todos os produtos e nunca impede o cadastro manual.</p><div className="mt-3 flex flex-wrap gap-2">{Object.entries(PRODUCT_SOURCE_CAPABILITIES).map(([key,item])=><span key={key} className="rounded-full border bg-white px-2.5 py-1 text-xs font-bold">{item.name} — {item.label}</span>)}</div><div className="mt-3 flex flex-col gap-2 sm:flex-row"><label className="relative flex-1"><span className="sr-only">URL do produto</span><Link2 className="absolute left-3 top-3.5 text-slate-400" size={18}/><input type="url" value={url} onChange={event=>setUrl(event.target.value)} placeholder="Cole uma URL do Mercado Livre ou Logzz" className="min-h-12 w-full rounded-xl border border-amber-200 bg-white pl-10 pr-3 text-sm outline-none focus:border-amber-500"/></label><button type="button" onClick={run} disabled={pending||!url.trim()} className="min-h-12 rounded-xl bg-slate-900 px-5 font-bold text-white disabled:opacity-50">{pending?"Importando…":"Tentar importar"}</button></div>{authorizeUrl?<a href={authorizeUrl} className="mt-3 inline-flex min-h-11 items-center rounded-xl bg-amber-400 px-4 text-sm font-black text-slate-950">Conectar Mercado Livre</a>:null}</div>:null}
     {stage!=="idle"?<p role="status" className="mt-3 text-sm font-black text-violet-800">{stage==="importing"?"Importando produto…":stage==="generating"?"Gerando conteúdo…":"Conteúdo pronto para revisão."}</p>:null}
     {message?<p role="status" className="mt-3 whitespace-pre-line text-sm font-bold text-slate-700">{message}</p>:null}
     <AIProductAssistant/>

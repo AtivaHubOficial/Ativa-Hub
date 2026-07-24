@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Boxes, FolderTree, Handshake, LayoutDashboard, Settings } from "lucide-react";
+import { Boxes, FolderSearch, FolderTree, Handshake, LayoutDashboard, Settings } from "lucide-react";
 import AdminLogoutButton from "@/components/admin/AdminLogoutButton";
 
 const navigation = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/admin", available: true },
   { label: "Produtos", icon: Boxes, href: "/admin/produtos", available: true },
+  { label: "Discovery", icon: FolderSearch, href: "/admin/discovery", available: true },
   { label: "Categorias", icon: FolderTree, href: "/admin/categorias", available: true },
   { label: "Parceiros", icon: Handshake, href: "/admin/parceiros", available: true },
   { label: "Configurações", icon: Settings, href: "/admin/configuracoes", available: true },

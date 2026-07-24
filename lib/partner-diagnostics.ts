@@ -1,4 +1,5 @@
 import type { PartnerOverview, PartnerStatus } from "../types/partner.ts";
+import { PRODUCT_SOURCE_CAPABILITIES } from "./product-source-capabilities.ts";
 
 export type PartnerProductRecord = {
   source?: string | null;
@@ -56,7 +57,7 @@ export function buildPartnerOverview(input: {
       key: "logzz",
       name: "Logzz",
       status: integrationStatus(input.logzzConfigured, input.logzzConfigured, true),
-      availability: "Disponível",
+      availability: PRODUCT_SOURCE_CAPABILITIES.logzz.label,
       ...logzz,
       lastSync: null,
       diagnostic: input.logzzConfigured
@@ -71,7 +72,7 @@ export function buildPartnerOverview(input: {
       key: "mercado_livre",
       name: "Mercado Livre",
       status: integrationStatus(input.mercadoLivreConfigured, input.mercadoLivreOAuthPresent, false),
-      availability: "Experimental",
+      availability: PRODUCT_SOURCE_CAPABILITIES.mercado_livre.label,
       ...mercadoLivre,
       lastSync: mercadoLivre.lastImport,
       accountId: input.mercadoLivreAccountId ?? null,
@@ -88,14 +89,14 @@ export function buildPartnerOverview(input: {
     },
     ...(["amazon", "shopee", "magalu"] as const).map((key) => ({
       key,
-      name: key === "amazon" ? "Amazon" : key === "shopee" ? "Shopee" : "Magalu",
+      name: PRODUCT_SOURCE_CAPABILITIES[key].name,
       status: "Em desenvolvimento" as const,
       availability: "Planejada" as const,
       importedProducts: 0,
       activeProducts: 0,
       lastImport: null,
       lastSync: null,
-      diagnostic: "Integração planejada. Nenhuma API ou credencial foi configurada.",
+      diagnostic: "Importação ainda indisponível. Esta integração ainda não possui API ou credenciais configuradas.",
       actions: [],
     })),
   ];
